@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: clinic-whatsapp-bot
+    env: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: API_SECRET
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: LEADS_LABEL_NAME
+        sync: false
+      - key: LEADS_LABEL_ID
+        sync: false
+      - key: MOH_LABEL_NAME
+        sync: false
+      - key: MOH_LABEL_ID
+        sync: false
+      - key: FORWARD_NUMBERS
+        sync: false

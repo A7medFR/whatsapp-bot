@@ -1,0 +1,119 @@
+{
+  "2": {
+    "id": "2",
+    "name": "تجهيز بيانات ",
+    "color": 8,
+    "deleted": false,
+    "predefinedId": "2"
+  },
+  "5": {
+    "id": "5",
+    "name": "Wed",
+    "color": 5,
+    "deleted": false
+  },
+  "6": {
+    "id": "6",
+    "name": "Important",
+    "color": 11,
+    "deleted": false,
+    "predefinedId": "6"
+  },
+  "7": {
+    "id": "7",
+    "name": "Follow up",
+    "color": 12,
+    "deleted": false,
+    "predefinedId": "7"
+  },
+  "9": {
+    "id": "9",
+    "name": "Moo salah👺",
+    "color": 14,
+    "deleted": false
+  },
+  "14": {
+    "id": "14",
+    "name": "وزارة الصحة",
+    "color": 15,
+    "deleted": false
+  },
+  "15": {
+    "id": "15",
+    "name": "تجهيز بيانات ( CS )",
+    "color": 19,
+    "deleted": false
+  },
+  "16": {
+    "id": "16",
+    "name": "خطأ بيانات الاجازات ",
+    "color": 18,
+    "deleted": false
+  },
+  "17": {
+    "id": "17",
+    "name": "حجوزات ملغية😶‍🌫️",
+    "color": 9,
+    "deleted": false
+  },
+  "18": {
+    "id": "18",
+    "name": "إلغاء حجوزات اسنان",
+    "color": 10,
+    "deleted": false
+  },
+  "19": {
+    "id": "19",
+    "name": "meta",
+    "color": 0,
+    "deleted": false
+  },
+  "20": {
+    "id": "20",
+    "name": "ليدز باتريكس ",
+    "color": 1,
+    "deleted": false
+  },
+  "21": {
+    "id": "21",
+    "name": "كروت",
+    "color": 2,
+    "deleted": false
+  },
+  "22": {
+    "id": "22",
+    "name": "شركات",
+    "color": 3,
+    "deleted": false
+  },
+  "23": {
+    "id": "23",
+    "name": "nada",
+    "color": 4,
+    "deleted": false
+  },
+  "24": {
+    "id": "24",
+    "name": "سيلز",
+    "color": 5,
+    "deleted": false
+  },
+  "25": {
+    "id": "25",
+    "name": "‏غير مقروءة",
+    "color": 0,
+    "deleted": false
+  },
+  "26": {
+    "id": "26",
+    "name": "‏المفضلة",
+    "color": 0,
+    "deleted": false
+  },
+  "27": {
+    "id": "27",
+    "name": "‏المجموعات",
+    "color": 0,
+    "deleted": false
+  }
+}
