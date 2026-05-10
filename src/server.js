@@ -14,12 +14,20 @@ const cors    = require('cors');
 const fs      = require('fs');
 const path    = require('path');
 const QRCode  = require('qrcode');
+const multer  = require('multer');
 const wa      = require('./whatsapp');
 const { buildGreeting, buildImageCaption, buildServicesText, buildCTA } = require('./messageBuilder');
 
 // ─── Express setup ────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json({ limit: '20mb' }));
+
+// ─── Multer setup for file uploads ────────────────────────────────────────────
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 20 * 1024 * 1024 } // 20 MB limit
+});
 
 // ─── Static file server (serves offer images from the React app's public dir) ──
 const STATIC_DIR = process.env.STATIC_FILES_DIR
@@ -104,6 +112,61 @@ app.get('/labels', requireApiKey, (_req, res) => {
     color: l.color,
   }));
   res.json({ count: list.length, labels: list });
+});
+
+/**
+ * POST /send-file
+ * Body (multipart/form-data): phone, caption, file
+ *
+ * Sends a single arbitrary file (image, document, pdf) to the specified phone.
+ */
+app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) => {
+  const { phone, caption } = req.body;
+  const file = req.file;
+
+  if (!phone || typeof phone !== 'string') {
+    return res.status(400).json({ error: 'phone is required.' });
+  }
+  const cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+    return res.status(400).json({ error: `Invalid phone: "${cleanPhone}".` });
+  }
+  if (!file) {
+    return res.status(400).json({ error: 'file is required.' });
+  }
+  if (!wa.getStatus().connected) {
+    return res.status(503).json({ error: 'WhatsApp not connected. Check the terminal.' });
+  }
+
+  try {
+    await wa.sendMessage(cleanPhone, {
+      document: file.buffer,
+      mimetype: file.mimetype,
+      fileName: file.originalname,
+      caption: caption || ''
+    });
+
+    // Optionally apply leads label
+    const leadsLabel = process.env.LEADS_LABEL_NAME || 'ليدز باتريكس 1';
+    let labelStatus = null;
+    try {
+      await wa.addLabelToChat(cleanPhone, leadsLabel);
+      labelStatus = { success: true, label: leadsLabel };
+    } catch (err) {
+      console.warn(`Could not apply label "${leadsLabel}": ${err.message}`);
+      labelStatus = { success: false, label: leadsLabel, error: err.message };
+    }
+
+    return res.json({
+      success: true,
+      message: 'File sent successfully',
+      fileName: file.originalname,
+      labelStatus
+    });
+  } catch (err) {
+    console.error('Fatal send-file error:', err);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 /**
