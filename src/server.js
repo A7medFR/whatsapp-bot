@@ -188,7 +188,27 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
   });
 });
 
+/**
+ * GET /session/export
+ * ONE-TIME USE after QR scan: exports the WhatsApp session as base64.
+ * Copy the returned WA_SESSION_B64 value into Back4App env vars, then redeploy.
+ */
+app.get('/session/export', requireApiKey, (_req, res) => {
+  const { encodeSession } = require('./session');
+  const b64 = encodeSession();
+  if (!b64) {
+    return res.status(404).json({
+      error: 'No session found. Make sure the bot is connected (scan QR first).',
+    });
+  }
+  res.json({
+    message: 'Copy WA_SESSION_B64 into your Back4App environment variables, then redeploy.',
+    WA_SESSION_B64: b64,
+  });
+});
+
 app.use((_req, res) => res.status(404).json({ error: 'Route not found.' }));
+
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;

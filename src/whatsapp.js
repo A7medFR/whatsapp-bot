@@ -18,6 +18,7 @@ const pino   = require('pino');
 const qrcode = require('qrcode-terminal');
 const fs     = require('fs');
 const path   = require('path');
+const { restoreSession } = require('./session');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const FORWARD_NUMBERS = (process.env.FORWARD_NUMBERS || '')
@@ -114,6 +115,7 @@ async function addLabelToChat(phone, labelName) {
 
 // ─── Connect ──────────────────────────────────────────────────────────────────
 async function connect() {
+  restoreSession();   // Restore session from WA_SESSION_B64 env var (Back4App / cloud)
   loadLabelCache();
 
   const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
