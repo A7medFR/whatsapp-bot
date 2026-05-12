@@ -322,6 +322,14 @@ async function sendMessage(phone, payload) {
         await sock.sendMessage(jid, { text: payload.caption });
       }
     }
+  } else if (payload.document) {
+    // File / document upload (Buffer from multer)
+    await sock.sendMessage(jid, {
+      document: payload.document,
+      mimetype: payload.mimetype || 'application/octet-stream',
+      fileName: payload.fileName || 'file',
+      caption:  payload.caption  || '',
+    });
   } else if (payload.text) {
     await sock.sendMessage(jid, { text: payload.text });
   }
