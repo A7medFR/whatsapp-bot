@@ -121,6 +121,7 @@ app.get('/labels', requireApiKey, (_req, res) => {
  * Sends a single arbitrary file (image, document, pdf) to the specified phone.
  */
 app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) => {
+  console.log('--- [Railway Debug] Received /send-file request! ---');
   const { phone, caption } = req.body;
   const file = req.file;
 
