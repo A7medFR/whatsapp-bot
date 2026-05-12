@@ -139,11 +139,15 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
     return res.status(503).json({ error: 'WhatsApp not connected. Check the terminal.' });
   }
 
+  // Fix Arabic/non-ASCII filenames: browsers send UTF-8 but HTTP headers are parsed
+  // as latin1 by Node's http module, so we re-encode back to the correct string.
+  const fileName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+
   try {
     await wa.sendMessage(cleanPhone, {
       document: file.buffer,
       mimetype: file.mimetype,
-      fileName: file.originalname,
+      fileName: fileName,
       caption: caption || ''
     });
 
@@ -161,7 +165,7 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
     return res.json({
       success: true,
       message: 'File sent successfully',
-      fileName: file.originalname,
+      fileName: fileName,
       labelStatus
     });
   } catch (err) {
