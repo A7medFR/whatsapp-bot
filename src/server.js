@@ -122,8 +122,11 @@ app.get('/labels', requireApiKey, (_req, res) => {
  */
 app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) => {
   console.log('--- [Railway Debug] Received /send-file request! ---');
-  const { phone, caption } = req.body;
-  const file = req.file;
+  const { phone, caption, branchTexts: branchTextsRaw } = req.body;
+  const file        = req.file;
+  const branchTexts = (() => { try { return JSON.parse(branchTextsRaw || '[]'); } catch { return []; } })();
+  const hasBranches = Array.isArray(branchTexts) && branchTexts.length > 0;
+  const hasCaption  = typeof caption === 'string' && caption.trim().length > 0;
 
   if (!phone || typeof phone !== 'string') {
     return res.status(400).json({ error: 'phone is required.' });
@@ -132,8 +135,8 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
   if (cleanPhone.length < 10 || cleanPhone.length > 15) {
     return res.status(400).json({ error: `Invalid phone: "${cleanPhone}".` });
   }
-  if (!file) {
-    return res.status(400).json({ error: 'file is required.' });
+  if (!file && !hasCaption && !hasBranches) {
+    return res.status(400).json({ error: 'يجب توفير ملف أو رسالة أو موقع فرع على الأقل.' });
   }
   if (!wa.getStatus().connected) {
     return res.status(503).json({ error: 'WhatsApp not connected. Check the terminal.' });
@@ -149,17 +152,29 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
     console.warn('WhatsApp number check failed, proceeding anyway:', checkErr.message);
   }
 
-  // Fix Arabic/non-ASCII filenames: browsers send UTF-8 but HTTP headers are parsed
-  // as latin1 by Node's http module, so we re-encode back to the correct string.
-  const fileName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+  // Fix Arabic/non-ASCII filenames (only when a file is present)
+  const fileName = file
+    ? Buffer.from(file.originalname, 'latin1').toString('utf8')
+    : null;
 
   try {
-    await wa.sendMessage(cleanPhone, {
-      document: file.buffer,
-      mimetype: file.mimetype,
-      fileName: fileName,
-      caption: caption || ''
-    });
+    if (file) {
+      await wa.sendMessage(cleanPhone, {
+        document: file.buffer,
+        mimetype: file.mimetype,
+        fileName: fileName,
+        caption: caption || ''
+      });
+    } else if (hasCaption) {
+      await wa.sendMessage(cleanPhone, { text: caption.trim() });
+    }
+
+    if (hasBranches) {
+      for (const bt of branchTexts) {
+        await wa.sendMessage(cleanPhone, { text: bt });
+        await delay(800);
+      }
+    }
 
     // Optionally apply leads label
     const leadsLabel = process.env.LEADS_LABEL_NAME || 'ليدز باتريكس 1';
@@ -192,7 +207,10 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
  * labelled with the LEADS_LABEL_NAME defined in .env
  */
 app.post('/send-offers', requireApiKey, async (req, res) => {
-  const { phone, offers, isAllOffers } = req.body;
+  const { phone, offers, isAllOffers, customText, branchTexts } = req.body;
+  const offerList     = Array.isArray(offers) ? offers : [];
+  const hasBranches   = Array.isArray(branchTexts) && branchTexts.length > 0;
+  const hasCustomText = typeof customText === 'string' && customText.trim().length > 0;
 
   // ── Validate ──────────────────────────────────────────────────────────────
   if (!phone || typeof phone !== 'string') {
@@ -202,8 +220,8 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
   if (cleanPhone.length < 10 || cleanPhone.length > 15) {
     return res.status(400).json({ error: `Invalid phone: "${cleanPhone}".` });
   }
-  if (!Array.isArray(offers) || offers.length === 0) {
-    return res.status(400).json({ error: 'offers must be a non-empty array.' });
+  if (offerList.length === 0 && !hasBranches && !hasCustomText) {
+    return res.status(400).json({ error: 'يجب إرسال عرض أو رسالة أو موقع على الأقل.' });
   }
   if (!wa.getStatus().connected) {
     return res.status(503).json({ error: 'WhatsApp not connected. Check the terminal.' });
@@ -224,13 +242,13 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
 
   try {
     // 1. Greeting
-    if (!isAllOffers) {
+    if (offerList.length > 0 && !isAllOffers) {
       await wa.sendMessage(cleanPhone, { text: buildGreeting() });
       await delay(1500);
     }
 
     // 2. Each offer
-    for (const offer of offers) {
+    for (const offer of offerList) {
       try {
         if (offer.image_url) {
           await wa.sendMessage(cleanPhone, {
@@ -242,7 +260,6 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
           await wa.sendMessage(cleanPhone, { text: `✨ *${offer.title}*` });
           await delay(1000);
         }
-
         if (!isAllOffers) {
           await wa.sendMessage(cleanPhone, { text: buildServicesText(offer) });
           await delay(1200);
@@ -254,11 +271,28 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
       }
     }
 
-    // 3. CTA
-    if (isAllOffers) {
-      await wa.sendMessage(cleanPhone, { text: buildAllOffersCTA() });
-    } else {
-      await wa.sendMessage(cleanPhone, { text: buildCTA() });
+    // 3. CTA (only if offers were sent)
+    if (offerList.length > 0) {
+      if (isAllOffers) {
+        await wa.sendMessage(cleanPhone, { text: buildAllOffersCTA() });
+      } else {
+        await wa.sendMessage(cleanPhone, { text: buildCTA() });
+      }
+      await delay(1000);
+    }
+
+    // 4. Custom text
+    if (hasCustomText) {
+      await wa.sendMessage(cleanPhone, { text: customText.trim() });
+      await delay(800);
+    }
+
+    // 5. Branch locations
+    if (hasBranches) {
+      for (const bt of branchTexts) {
+        await wa.sendMessage(cleanPhone, { text: bt });
+        await delay(800);
+      }
     }
   } catch (err) {
     console.error('Fatal send error:', err);
