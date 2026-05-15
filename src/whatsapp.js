@@ -335,4 +335,22 @@ async function sendMessage(phone, payload) {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat };
+// ─── WhatsApp number check ────────────────────────────────────────────────────
+/**
+ * Returns true if the given phone number (digits only, with country code) is
+ * registered on WhatsApp, false otherwise.
+ */
+async function isRegisteredNumber(phone) {
+  if (!sock || !isReady) throw new Error('WhatsApp is not connected yet.');
+  try {
+    const jid = `${phone}@s.whatsapp.net`;
+    const [result] = await sock.onWhatsApp(jid);
+    return !!(result && result.exists);
+  } catch (err) {
+    console.warn(`⚠️  Could not verify WhatsApp registration for +${phone}: ${err.message}`);
+    // On unexpected errors, allow the send to proceed (fail-open)
+    return true;
+  }
+}
+
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber };

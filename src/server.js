@@ -139,6 +139,16 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
     return res.status(503).json({ error: 'WhatsApp not connected. Check the terminal.' });
   }
 
+  // ── Check if the number is registered on WhatsApp ─────────────────────────
+  try {
+    const onWA = await wa.isRegisteredNumber(cleanPhone);
+    if (!onWA) {
+      return res.status(400).json({ error: 'الرقم المدخل غير مسجل في واتساب. يرجى التأكد من صحة الرقم.' });
+    }
+  } catch (checkErr) {
+    console.warn('WhatsApp number check failed, proceeding anyway:', checkErr.message);
+  }
+
   // Fix Arabic/non-ASCII filenames: browsers send UTF-8 but HTTP headers are parsed
   // as latin1 by Node's http module, so we re-encode back to the correct string.
   const fileName = Buffer.from(file.originalname, 'latin1').toString('utf8');
@@ -197,6 +207,16 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
   }
   if (!wa.getStatus().connected) {
     return res.status(503).json({ error: 'WhatsApp not connected. Check the terminal.' });
+  }
+
+  // ── Check if the number is registered on WhatsApp ─────────────────────────
+  try {
+    const onWA = await wa.isRegisteredNumber(cleanPhone);
+    if (!onWA) {
+      return res.status(400).json({ error: 'الرقم المدخل غير مسجل في واتساب. يرجى التأكد من صحة الرقم.' });
+    }
+  } catch (checkErr) {
+    console.warn('WhatsApp number check failed, proceeding anyway:', checkErr.message);
   }
 
   // ── Send messages ──────────────────────────────────────────────────────────
