@@ -16,7 +16,7 @@ const path    = require('path');
 const QRCode  = require('qrcode');
 const multer  = require('multer');
 const wa      = require('./whatsapp');
-const { buildGreeting, buildImageCaption, buildServicesText, buildCTA } = require('./messageBuilder');
+const { buildGreeting, buildImageCaption, buildServicesText, buildCTA, buildAllOffersCTA } = require('./messageBuilder');
 
 // ─── Express setup ────────────────────────────────────────────────────────────
 const app = express();
@@ -182,7 +182,7 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
  * labelled with the LEADS_LABEL_NAME defined in .env
  */
 app.post('/send-offers', requireApiKey, async (req, res) => {
-  const { phone, offers } = req.body;
+  const { phone, offers, isAllOffers } = req.body;
 
   // ── Validate ──────────────────────────────────────────────────────────────
   if (!phone || typeof phone !== 'string') {
@@ -204,8 +204,10 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
 
   try {
     // 1. Greeting
-    await wa.sendMessage(cleanPhone, { text: buildGreeting() });
-    await delay(1500);
+    if (!isAllOffers) {
+      await wa.sendMessage(cleanPhone, { text: buildGreeting() });
+      await delay(1500);
+    }
 
     // 2. Each offer
     for (const offer of offers) {
@@ -213,12 +215,18 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
         if (offer.image_url) {
           await wa.sendMessage(cleanPhone, {
             image:   offer.image_url,
-            caption: buildImageCaption(offer),
+            caption: isAllOffers ? '' : buildImageCaption(offer),
           });
           await delay(1000);
+        } else if (isAllOffers) {
+          await wa.sendMessage(cleanPhone, { text: `✨ *${offer.title}*` });
+          await delay(1000);
         }
-        await wa.sendMessage(cleanPhone, { text: buildServicesText(offer) });
-        await delay(1200);
+
+        if (!isAllOffers) {
+          await wa.sendMessage(cleanPhone, { text: buildServicesText(offer) });
+          await delay(1200);
+        }
         results.push({ offerId: offer.id, title: offer.title, status: 'sent' });
       } catch (err) {
         console.error(`Failed to send offer "${offer.title}":`, err.message);
@@ -227,7 +235,11 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
     }
 
     // 3. CTA
-    await wa.sendMessage(cleanPhone, { text: buildCTA() });
+    if (isAllOffers) {
+      await wa.sendMessage(cleanPhone, { text: buildAllOffersCTA() });
+    } else {
+      await wa.sendMessage(cleanPhone, { text: buildCTA() });
+    }
   } catch (err) {
     console.error('Fatal send error:', err);
     return res.status(500).json({ error: err.message, results });

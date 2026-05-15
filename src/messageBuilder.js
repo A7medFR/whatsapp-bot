@@ -65,4 +65,16 @@ function buildCTA() {
   );
 }
 
-module.exports = { buildGreeting, buildImageCaption, buildServicesText, buildCTA };
+/**
+ * Build the final CTA message for the "All Offers" case.
+ */
+function buildAllOffersCTA() {
+  return (
+    `الرجاء اختيار العرض الذي ترغب في حجزه من الصور أعلاه 👆 وسنقوم بخدمتك فوراً! 😊\n\n` +
+    `للحجز والاستفسار يمكنكم التواصل مع خدمة العملاء على الرقم: 920022480\n` +
+    `أو عبر الواتساب: 0553144338\n\n` +
+    `_${CLINIC_NAME}_`
+  );
+}
+
+module.exports = { buildGreeting, buildImageCaption, buildServicesText, buildCTA, buildAllOffersCTA };
