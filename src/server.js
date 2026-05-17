@@ -101,7 +101,7 @@ app.get('/qr', (_req, res) => {
 });
 
 /** Export Session (Base64) */
-app.get('/session/export', requireApiKey, (_req, res) => {
+app.get('/session/export', (_req, res) => {
   const b64 = session.encodeSession();
   if (!b64) return res.status(404).json({ error: 'No active session found.' });
   res.json({
