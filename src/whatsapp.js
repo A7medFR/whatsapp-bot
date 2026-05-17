@@ -130,6 +130,7 @@ async function connect() {
     defaultQueryTimeoutMs: 60000,
     keepAliveIntervalMs:   25000,
     markOnlineOnConnect:   false,
+    qrTimeout:             300000, // Wait up to 5 minutes for QR scan
   });
 
   sock.ev.on('creds.update', saveCreds);
