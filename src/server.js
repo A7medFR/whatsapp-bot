@@ -334,7 +334,7 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
   }
 
   // ── Auto-label as lead ─────────────────────────────────────────────────────
-  const anySucceeded = results.some(r => r.status === 'sent');
+  const anySucceeded = results.length === 0 || results.some(r => r.status === 'sent');
   let labelStatus = null;
 
   if (anySucceeded) {
@@ -348,7 +348,7 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
     }
   }
 
-  const allFailed = results.every(r => r.status === 'failed');
+  const allFailed = results.length > 0 && results.every(r => r.status === 'failed');
   res.status(allFailed ? 500 : 200).json({
     success:     !allFailed,
     results,
