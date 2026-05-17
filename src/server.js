@@ -74,16 +74,70 @@ app.get('/', async (_req, res) => {
   }
 
   if (hasQR && qr) {
-    const qrImage = await QRCode.toDataURL(qr, { width: 280, margin: 2 });
-    return res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"
-      http-equiv="refresh" content="15"><title>Scan QR</title>
-      <style>body{font-family:sans-serif;background:#0d1117;color:#fff;text-align:center;padding:40px}
-      h1{font-size:2rem}p{color:#8b949e}img{border:10px solid #fff;border-radius:16px;margin:20px 0}
-      .hint{font-size:0.85rem;color:#6e7681}</style></head>
-      <body><h1>📱 Scan QR to Connect WhatsApp</h1>
-      <p>Open WhatsApp → Settings → Linked Devices → Link a Device</p>
-      <img src="${qrImage}" />
-      <p class="hint">QR refreshes every 15 seconds — bot will wait up to 5 minutes for you to scan</p></body></html>`);
+    const qrImage = await QRCode.toDataURL(qr, { width: 300, margin: 2 });
+    return res.send(`<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>Scan QR — WhatsApp Bot</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #0d1117; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 40px 20px; }
+    h1 { font-size: 1.8rem; margin-bottom: 8px; }
+    .sub { color: #8b949e; font-size: 0.95rem; margin-bottom: 28px; text-align: center; }
+    .qr-wrap { position: relative; }
+    #qr-img { border: 10px solid #fff; border-radius: 16px; display: block; width: 300px; height: 300px; transition: opacity 0.3s; }
+    #qr-img.fading { opacity: 0.3; }
+    .badge { margin-top: 18px; font-size: 0.82rem; color: #6e7681; display: flex; align-items: center; gap: 6px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .status { margin-top: 14px; font-size: 0.85rem; color: #f59e0b; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <h1>📱 Scan QR to Connect WhatsApp</h1>
+  <p class="sub">Open WhatsApp → Settings → Linked Devices → Link a Device</p>
+  <div class="qr-wrap">
+    <img id="qr-img" src="${qrImage}" alt="QR Code" />
+  </div>
+  <div class="badge"><div class="dot"></div> Synced — QR updates automatically when it changes</div>
+  <div class="status" id="status"></div>
+
+  <script>
+    let lastQRString = '';
+    const img = document.getElementById('qr-img');
+    const statusEl = document.getElementById('status');
+    let consecutiveErrors = 0;
+
+    async function poll() {
+      try {
+        const res = await fetch('/qr');
+        const data = await res.json();
+
+        if (!data.hasQR) {
+          // Bot connected — reload to show success page
+          statusEl.textContent = '✅ Connected! Redirecting...';
+          setTimeout(() => window.location.reload(), 800);
+          return;
+        }
+
+        if (data.qr && data.qr !== lastQRString) {
+          lastQRString = data.qr;
+          img.classList.add('fading');
+          await new Promise(r => setTimeout(r, 150));
+          img.src = '/qr-image?qr=' + encodeURIComponent(data.qr) + '&t=' + Date.now();
+          img.onload = () => img.classList.remove('fading');
+          statusEl.textContent = 'QR updated at ' + new Date().toLocaleTimeString();
+        }
+        consecutiveErrors = 0;
+      } catch (e) {
+        consecutiveErrors++;
+        if (consecutiveErrors > 5) statusEl.textContent = 'Connection issue — retrying...';
+      }
+    }
+
+    setInterval(poll, 2000);
+  </script>
+</body></html>`);
   }
 
   res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"
@@ -93,11 +147,25 @@ app.get('/', async (_req, res) => {
 });
 
 
-/** QR code (for first-time login UI) */
+/** QR code JSON (for polling) */
 app.get('/qr', (_req, res) => {
   const { hasQR, qr } = wa.getStatus();
   if (!hasQR) return res.json({ hasQR: false, message: 'No QR available.' });
   res.json({ hasQR: true, qr });
+});
+
+/** QR image (renders raw QR string → PNG, used by the live-polling page) */
+app.get('/qr-image', async (req, res) => {
+  const { qr: qrStr } = req.query;
+  if (!qrStr) return res.status(400).send('Missing qr param');
+  try {
+    const buf = await QRCode.toBuffer(qrStr, { width: 300, margin: 2 });
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'no-store');
+    res.send(buf);
+  } catch (e) {
+    res.status(500).send('QR render failed');
+  }
 });
 
 /** Export Session (Base64) */
