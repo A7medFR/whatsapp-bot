@@ -91,6 +91,14 @@ app.get('/', async (_req, res) => {
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; animation: pulse 1.5s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
     .status { margin-top: 14px; font-size: 0.85rem; color: #f59e0b; min-height: 20px; }
+    .countdown { margin-top: 12px; font-size: 0.82rem; color: #6e7681; }
+    .countdown span { color: #f59e0b; font-weight: 700; }
+    .share-box { margin-top: 24px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px 20px; width: 100%; max-width: 380px; text-align: center; }
+    .share-box p { font-size: 0.82rem; color: #8b949e; margin-bottom: 10px; }
+    .share-url { font-size: 0.78rem; color: #58a6ff; word-break: break-all; background: #0d1117; padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; }
+    .copy-btn { background: #238636; color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background 0.2s; width: 100%; }
+    .copy-btn:hover { background: #2ea043; }
+    .copy-btn.copied { background: #1a7f37; }
   </style>
 </head>
 <body>
@@ -100,13 +108,42 @@ app.get('/', async (_req, res) => {
     <img id="qr-img" src="${qrImage}" alt="QR Code" />
   </div>
   <div class="badge"><div class="dot"></div> Synced — QR updates automatically when it changes</div>
+  <div class="countdown">Next QR in <span id="countdown">20</span>s</div>
   <div class="status" id="status"></div>
+
+  <div class="share-box">
+    <p>📲 Can't scan? Send the link below to the person with the device — they can open it on their phone browser and scan directly:</p>
+    <div class="share-url" id="share-url"></div>
+    <button class="copy-btn" id="copy-btn" onclick="copyLink()">📋 Copy Link</button>
+  </div>
 
   <script>
     let lastQRString = '';
     const img = document.getElementById('qr-img');
     const statusEl = document.getElementById('status');
+    const countdownEl = document.getElementById('countdown');
+    const shareUrlEl = document.getElementById('share-url');
     let consecutiveErrors = 0;
+    let countdown = 20;
+
+    // Show the current page URL for sharing
+    shareUrlEl.textContent = window.location.href.split('?')[0];
+
+    function copyLink() {
+      const url = window.location.href.split('?')[0];
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = document.getElementById('copy-btn');
+        btn.textContent = '✅ Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '📋 Copy Link'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+
+    // Countdown timer that resets when QR changes
+    setInterval(() => {
+      countdown = Math.max(0, countdown - 1);
+      if (countdownEl) countdownEl.textContent = countdown;
+    }, 1000);
 
     async function poll() {
       try {
@@ -114,7 +151,6 @@ app.get('/', async (_req, res) => {
         const data = await res.json();
 
         if (!data.hasQR) {
-          // Bot connected — reload to show success page
           statusEl.textContent = '✅ Connected! Redirecting...';
           setTimeout(() => window.location.reload(), 800);
           return;
@@ -122,6 +158,7 @@ app.get('/', async (_req, res) => {
 
         if (data.qr && data.qr !== lastQRString) {
           lastQRString = data.qr;
+          countdown = 20; // reset countdown on new QR
           img.classList.add('fading');
           await new Promise(r => setTimeout(r, 150));
           img.src = '/qr-image?qr=' + encodeURIComponent(data.qr) + '&t=' + Date.now();
