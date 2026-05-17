@@ -76,14 +76,14 @@ app.get('/', async (_req, res) => {
   if (hasQR && qr) {
     const qrImage = await QRCode.toDataURL(qr, { width: 280, margin: 2 });
     return res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"
-      http-equiv="refresh" content="300"><title>Scan QR</title>
+      http-equiv="refresh" content="15"><title>Scan QR</title>
       <style>body{font-family:sans-serif;background:#0d1117;color:#fff;text-align:center;padding:40px}
       h1{font-size:2rem}p{color:#8b949e}img{border:10px solid #fff;border-radius:16px;margin:20px 0}
       .hint{font-size:0.85rem;color:#6e7681}</style></head>
       <body><h1>📱 Scan QR to Connect WhatsApp</h1>
       <p>Open WhatsApp → Settings → Linked Devices → Link a Device</p>
       <img src="${qrImage}" />
-      <p class="hint">Page refreshes automatically every 5 minutes</p></body></html>`);
+      <p class="hint">QR refreshes every 15 seconds — bot will wait up to 5 minutes for you to scan</p></body></html>`);
   }
 
   res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"
