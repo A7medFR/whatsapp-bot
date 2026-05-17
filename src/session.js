@@ -2,6 +2,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const AUTH_DIR = path.resolve('./auth_info_baileys');
 
@@ -16,10 +17,19 @@ function restoreSession() {
     return;
   }
   try {
-    const json = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+    const buffer = Buffer.from(b64, 'base64');
+    let jsonStr;
+    try {
+      jsonStr = zlib.inflateSync(buffer).toString('utf8');
+    } catch (err) {
+      // Fallback for older uncompressed base64 strings
+      jsonStr = buffer.toString('utf8');
+    }
+    
+    const json = JSON.parse(jsonStr);
     fs.mkdirSync(AUTH_DIR, { recursive: true });
     for (const [filename, content] of Object.entries(json)) {
-      fs.writeFileSync(path.join(AUTH_DIR, filename), JSON.stringify(content));
+      fs.writeFileSync(path.join(AUTH_DIR, filename), typeof content === 'string' ? content : JSON.stringify(content));
     }
     console.log('✅ WA session restored from WA_SESSION_B64 env var.');
   } catch (e) {
@@ -28,8 +38,7 @@ function restoreSession() {
 }
 
 /**
- * Read current auth_info_baileys/ and return as a base64-encoded JSON string.
- * Call GET /session/export (admin only) to retrieve this value after QR scan.
+ * Read current auth_info_baileys/ and return as a compressed base64 string.
  */
 function encodeSession() {
   try {
@@ -44,7 +53,9 @@ function encodeSession() {
         data[f] = fs.readFileSync(path.join(AUTH_DIR, f), 'utf8');
       }
     }
-    return Buffer.from(JSON.stringify(data)).toString('base64');
+    const jsonStr = JSON.stringify(data);
+    const compressed = zlib.deflateSync(jsonStr);
+    return compressed.toString('base64');
   } catch (e) {
     console.error('encodeSession error:', e.message);
     return null;
