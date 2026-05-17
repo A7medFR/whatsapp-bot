@@ -330,6 +330,17 @@ async function sendMessage(phone, payload) {
       fileName: payload.fileName || 'file',
       caption:  payload.caption  || '',
     });
+  } else if (payload.location) {
+    // Native WhatsApp location pin
+    const { lat, lng, name, address } = payload.location;
+    await sock.sendMessage(jid, {
+      location: {
+        degreesLatitude:  lat,
+        degreesLongitude: lng,
+        name:    name    || '',
+        address: address || '',
+      },
+    });
   } else if (payload.text) {
     await sock.sendMessage(jid, { text: payload.text });
   }

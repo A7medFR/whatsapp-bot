@@ -134,11 +134,14 @@ app.get('/labels', requireApiKey, (_req, res) => {
  */
 app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) => {
   console.log('--- [Railway Debug] Received /send-file request! ---');
-  const { phone, caption, branchTexts: branchTextsRaw } = req.body;
-  const file        = req.file;
-  const branchTexts = (() => { try { return JSON.parse(branchTextsRaw || '[]'); } catch { return []; } })();
-  const hasBranches = Array.isArray(branchTexts) && branchTexts.length > 0;
-  const hasCaption  = typeof caption === 'string' && caption.trim().length > 0;
+  const { phone, caption, customText, branchTexts: branchTextsRaw, locationInfo: locationInfoRaw } = req.body;
+  const file         = req.file;
+  const branchTexts  = (() => { try { return JSON.parse(branchTextsRaw  || '[]'); } catch { return []; } })();
+  const locationInfo = (() => { try { return JSON.parse(locationInfoRaw || '[]'); } catch { return []; } })();
+  const hasBranches    = Array.isArray(branchTexts)  && branchTexts.length  > 0;
+  const hasLocations   = Array.isArray(locationInfo) && locationInfo.length > 0;
+  const hasCaption     = typeof caption    === 'string' && caption.trim().length    > 0;
+  const hasCustomText  = typeof customText === 'string' && customText.trim().length > 0;
 
   if (!phone || typeof phone !== 'string') {
     return res.status(400).json({ error: 'phone is required.' });
@@ -147,7 +150,7 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
   if (cleanPhone.length < 10 || cleanPhone.length > 15) {
     return res.status(400).json({ error: `Invalid phone: "${cleanPhone}".` });
   }
-  if (!file && !hasCaption && !hasBranches) {
+  if (!file && !hasCaption && !hasCustomText && !hasBranches && !hasLocations) {
     return res.status(400).json({ error: 'يجب توفير ملف أو رسالة أو موقع فرع على الأقل.' });
   }
   if (!wa.getStatus().connected) {
@@ -181,7 +184,20 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
       await wa.sendMessage(cleanPhone, { text: caption.trim() });
     }
 
-    if (hasBranches) {
+    // Custom text message after file
+    if (hasCustomText) {
+      await delay(800);
+      await wa.sendMessage(cleanPhone, { text: customText.trim() });
+    }
+
+    // Native location pins (preferred)
+    if (hasLocations) {
+      for (const loc of locationInfo) {
+        await delay(800);
+        await wa.sendMessage(cleanPhone, { location: loc });
+      }
+    } else if (hasBranches) {
+      // Fallback: text links
       for (const bt of branchTexts) {
         await wa.sendMessage(cleanPhone, { text: bt });
         await delay(800);
@@ -219,9 +235,10 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
  * labelled with the LEADS_LABEL_NAME defined in .env
  */
 app.post('/send-offers', requireApiKey, async (req, res) => {
-  const { phone, offers, isAllOffers, customText, branchTexts } = req.body;
-  const offerList     = Array.isArray(offers) ? offers : [];
-  const hasBranches   = Array.isArray(branchTexts) && branchTexts.length > 0;
+  const { phone, offers, isAllOffers, customText, branchTexts, locationInfo } = req.body;
+  const offerList    = Array.isArray(offers)       ? offers       : [];
+  const hasBranches  = Array.isArray(branchTexts)  && branchTexts.length  > 0;
+  const hasLocations = Array.isArray(locationInfo) && locationInfo.length > 0;
   const hasCustomText = typeof customText === 'string' && customText.trim().length > 0;
 
   // ── Validate ──────────────────────────────────────────────────────────────
@@ -299,8 +316,13 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
       await delay(800);
     }
 
-    // 5. Branch locations
-    if (hasBranches) {
+    // 5. Branch locations — native pins preferred, text links as fallback
+    if (hasLocations) {
+      for (const loc of locationInfo) {
+        await wa.sendMessage(cleanPhone, { location: loc });
+        await delay(800);
+      }
+    } else if (hasBranches) {
       for (const bt of branchTexts) {
         await wa.sendMessage(cleanPhone, { text: bt });
         await delay(800);
