@@ -16,6 +16,7 @@ const path    = require('path');
 const QRCode  = require('qrcode');
 const multer  = require('multer');
 const wa      = require('./whatsapp');
+const session = require('./session');
 const { buildGreeting, buildImageCaption, buildServicesText, buildCTA, buildAllOffersCTA } = require('./messageBuilder');
 
 // ─── Express setup ────────────────────────────────────────────────────────────
@@ -97,6 +98,17 @@ app.get('/qr', (_req, res) => {
   const { hasQR, qr } = wa.getStatus();
   if (!hasQR) return res.json({ hasQR: false, message: 'No QR available.' });
   res.json({ hasQR: true, qr });
+});
+
+/** Export Session (Base64) */
+app.get('/session/export', requireApiKey, (_req, res) => {
+  const b64 = session.encodeSession();
+  if (!b64) return res.status(404).json({ error: 'No active session found.' });
+  res.json({
+    message: "Copy the base64 string below and set it as WA_SESSION_B64 in your Railway environment variables.",
+    base64Length: b64.length,
+    base64: b64
+  });
 });
 
 /**
