@@ -59,130 +59,623 @@ function requireApiKey(req, res, next) {
   next();
 }
 
+// ─── SSE Broadcast Setup ──────────────────────────────────────────────────────
+if (!global.logListeners) global.logListeners = [];
+global.broadcastLog = (log) => {
+  global.logListeners.forEach(listener => {
+    try {
+      listener(log);
+    } catch (_) {}
+  });
+};
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-/** Status + QR page — visit this URL in the browser to scan QR on Render */
+/** Premium Diagnostics Dashboard & Live Console UI */
 app.get('/', async (_req, res) => {
-  const { connected, hasQR, qr } = wa.getStatus();
-
-  if (connected) {
-    return res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bot Online</title>
-      <style>body{font-family:sans-serif;background:#0d1117;color:#fff;text-align:center;padding:60px}
-      h1{font-size:2.5rem}p{color:#8b949e;font-size:1.1rem}</style></head>
-      <body><h1>✅ WhatsApp Bot Online</h1><p>The bot is connected and running normally.</p>
-      <p style="color:#34d399">Connected to WhatsApp ✓</p></body></html>`);
-  }
-
-  if (hasQR && qr) {
-    const qrImage = await QRCode.toDataURL(qr, { width: 300, margin: 2 });
-    return res.send(`<!DOCTYPE html>
-<html lang="en"><head>
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
   <meta charset="UTF-8">
-  <title>Scan QR — WhatsApp Bot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patrix Medical — WhatsApp Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: sans-serif; background: #0d1117; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 40px 20px; }
-    h1 { font-size: 1.8rem; margin-bottom: 8px; }
-    .sub { color: #8b949e; font-size: 0.95rem; margin-bottom: 28px; text-align: center; }
-    .qr-wrap { position: relative; }
-    #qr-img { border: 10px solid #fff; border-radius: 16px; display: block; width: 300px; height: 300px; transition: opacity 0.3s; }
-    #qr-img.fading { opacity: 0.3; }
-    .badge { margin-top: 18px; font-size: 0.82rem; color: #6e7681; display: flex; align-items: center; gap: 6px; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-    .status { margin-top: 14px; font-size: 0.85rem; color: #f59e0b; min-height: 20px; }
-    .countdown { margin-top: 12px; font-size: 0.82rem; color: #6e7681; }
-    .countdown span { color: #f59e0b; font-weight: 700; }
-    .share-box { margin-top: 24px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px 20px; width: 100%; max-width: 380px; text-align: center; }
-    .share-box p { font-size: 0.82rem; color: #8b949e; margin-bottom: 10px; }
-    .share-url { font-size: 0.78rem; color: #58a6ff; word-break: break-all; background: #0d1117; padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; }
-    .copy-btn { background: #238636; color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background 0.2s; width: 100%; }
-    .copy-btn:hover { background: #2ea043; }
-    .copy-btn.copied { background: #1a7f37; }
-  </style>
-</head>
-<body>
-  <h1>📱 Scan QR to Connect WhatsApp</h1>
-  <p class="sub">Open WhatsApp → Settings → Linked Devices → Link a Device</p>
-  <div class="qr-wrap">
-    <img id="qr-img" src="${qrImage}" alt="QR Code" />
-  </div>
-  <div class="badge"><div class="dot"></div> Synced — QR updates automatically when it changes</div>
-  <div class="countdown">Next QR in <span id="countdown">20</span>s</div>
-  <div class="status" id="status"></div>
-
-  <div class="share-box">
-    <p>📲 Can't scan? Send the link below to the person with the device — they can open it on their phone browser and scan directly:</p>
-    <div class="share-url" id="share-url"></div>
-    <button class="copy-btn" id="copy-btn" onclick="copyLink()">📋 Copy Link</button>
-  </div>
-
-  <script>
-    let lastQRString = '';
-    const img = document.getElementById('qr-img');
-    const statusEl = document.getElementById('status');
-    const countdownEl = document.getElementById('countdown');
-    const shareUrlEl = document.getElementById('share-url');
-    let consecutiveErrors = 0;
-    let countdown = 20;
-
-    // Show the current page URL for sharing
-    shareUrlEl.textContent = window.location.href.split('?')[0];
-
-    function copyLink() {
-      const url = window.location.href.split('?')[0];
-      navigator.clipboard.writeText(url).then(() => {
-        const btn = document.getElementById('copy-btn');
-        btn.textContent = '✅ Copied!';
-        btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = '📋 Copy Link'; btn.classList.remove('copied'); }, 2000);
-      });
+    :root {
+      --bg-dark: #080d16;
+      --panel-bg: rgba(15, 23, 42, 0.75);
+      --accent-green: #10b981;
+      --accent-blue: #3b82f6;
+      --accent-yellow: #f59e0b;
+      --accent-red: #ef4444;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --terminal-bg: #030712;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.07) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 30px;
+    }
+    
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .logo-icon {
+      font-size: 2.2rem;
+      animation: pulse-icon 3s infinite ease-in-out;
+    }
+    
+    @keyframes pulse-icon {
+      0%, 100% { transform: scale(1) rotate(0deg); }
+      50% { transform: scale(1.08) rotate(5deg); }
+    }
+    
+    .logo-text h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #60a5fa, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .logo-text p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
     }
 
-    // Countdown timer that resets when QR changes
-    setInterval(() => {
-      countdown = Math.max(0, countdown - 1);
-      if (countdownEl) countdownEl.textContent = countdown;
-    }, 1000);
+    .badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      backdrop-filter: blur(12px);
+      border: 1px solid currentColor;
+      transition: all 0.3s ease;
+    }
 
-    async function poll() {
-      try {
-        const res = await fetch('/qr');
-        const data = await res.json();
+    .badge-connected {
+      color: #34d399;
+      background: rgba(52, 211, 153, 0.06);
+      box-shadow: 0 0 15px rgba(52, 211, 153, 0.15);
+    }
 
-        if (!data.hasQR) {
-          statusEl.textContent = '✅ Connected! Redirecting...';
-          setTimeout(() => window.location.reload(), 800);
-          return;
-        }
+    .badge-disconnected {
+      color: #f59e0b;
+      background: rgba(245, 158, 11, 0.06);
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+    }
 
-        if (data.qr && data.qr !== lastQRString) {
-          lastQRString = data.qr;
-          countdown = 20; // reset countdown on new QR
-          img.classList.add('fading');
-          await new Promise(r => setTimeout(r, 150));
-          img.src = '/qr-image?qr=' + encodeURIComponent(data.qr) + '&t=' + Date.now();
-          img.onload = () => img.classList.remove('fading');
-          statusEl.textContent = 'QR updated at ' + new Date().toLocaleTimeString();
-        }
-        consecutiveErrors = 0;
-      } catch (e) {
-        consecutiveErrors++;
-        if (consecutiveErrors > 5) statusEl.textContent = 'Connection issue — retrying...';
+    .badge-connecting {
+      color: #3b82f6;
+      background: rgba(59, 130, 246, 0.06);
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: currentColor;
+      animation: pulse-dot 1.5s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 25px;
+      flex: 1;
+    }
+
+    @media (min-width: 1024px) {
+      .main-grid-split {
+        grid-template-columns: 380px 1fr;
       }
     }
 
-    setInterval(poll, 2000);
-  </script>
-</body></html>`);
-  }
+    .card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s;
+    }
 
-  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"
-    http-equiv="refresh" content="4"><title>Connecting...</title>
-    <style>body{font-family:sans-serif;background:#0d1117;color:#fff;text-align:center;padding:60px}</style>
-    </head><body><h1>⏳ Connecting to WhatsApp...</h1><p>Please wait a few seconds...</p></body></html>`);
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-main);
+    }
+
+    /* QR Code styles */
+    .qr-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+    }
+
+    #qr-img {
+      border: 8px solid #ffffff;
+      border-radius: 16px;
+      width: 240px;
+      height: 240px;
+      display: block;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      transition: opacity 0.3s;
+    }
+
+    #qr-img.fading {
+      opacity: 0.2;
+    }
+
+    .instructions {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-top: 15px;
+      text-align: center;
+    }
+
+    .instructions ol {
+      text-align: left;
+      margin-left: 20px;
+      margin-top: 8px;
+    }
+
+    .instructions li {
+      margin-bottom: 4px;
+    }
+
+    /* Console terminal */
+    .console-card {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      height: 100%;
+      min-height: 450px;
+    }
+
+    .console-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .console-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 7px 15px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    .btn-export {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.3);
+      color: #93c5fd;
+      font-weight: 600;
+    }
+
+    .btn-export:hover {
+      background: rgba(59, 130, 246, 0.25);
+    }
+
+    .terminal {
+      background-color: var(--terminal-bg);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      font-family: 'Fira Code', 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
+      flex: 1;
+      max-height: 550px;
+    }
+
+    .log-line {
+      display: flex;
+      gap: 8px;
+      line-height: 1.4;
+      animation: log-fade-in 0.2s ease-out;
+      word-break: break-all;
+    }
+
+    @keyframes log-fade-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-time {
+      color: #64748b;
+      font-weight: 500;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .log-content {
+      color: #e2e8f0;
+    }
+
+    .log-info { color: #f1f5f9; }
+    .log-warn { color: #f59e0b; }
+    .log-error { color: #ef4444; }
+
+    .system-log {
+      color: #60a5fa;
+      font-style: italic;
+    }
+
+    .terminal::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    .terminal::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+    }
+    
+    .terminal::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+    
+    .terminal::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .copy-toast {
+      position: fixed;
+      bottom: 25px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #10b981;
+      color: white;
+      padding: 12px 28px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 100;
+    }
+
+    .copy-toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <div class="logo-icon">🏥</div>
+      <div class="logo-text">
+        <h1>Patrix Medical</h1>
+        <p>WhatsApp Core Console</p>
+      </div>
+    </div>
+
+    <div id="connection-status" class="badge">
+      <div class="dot"></div>
+      <span id="status-text">Checking Status...</span>
+    </div>
+  </header>
+
+  <div id="main-grid-element" class="main-grid">
+    <!-- QR Card (Rendered dynamic) -->
+    <div id="qr-card" class="card" style="display: none;">
+      <h3 class="card-title">📱 Scan QR Code</h3>
+      <div class="qr-container">
+        <img id="qr-img" src="" alt="Scan QR" />
+        <div class="instructions">
+          <p>Link this phone to WhatsApp Business:</p>
+          <ol>
+            <li>Open WhatsApp Business on clinic device</li>
+            <li>Tap <b>Menu (⋮)</b> or <b>Settings</b></li>
+            <li>Select <b>Linked Devices</b> → <b>Link a Device</b></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Connected Info Card (Rendered dynamic) -->
+    <div id="info-card" class="card" style="display: none;">
+      <h3 class="card-title">⚙️ Core Controller</h3>
+      <div style="display:flex; flex-direction:column; gap: 18px; flex:1; justify-content:center;">
+        <div>
+          <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">ENVIRONMENT STATUS</h4>
+          <p style="font-weight:700; color:#34d399; font-size:1.05rem;">Active & Connected ✓</p>
+        </div>
+        <div>
+          <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">ACTIVE SESSION BACKUP</h4>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
+            Export your WhatsApp token session directly to keep it persistently authenticated in Railway / Back4App / cloud hosting.
+          </p>
+          <button class="btn btn-export" onclick="exportSession()" style="width:100%; justify-content:center; padding:10px;">💾 Export Session Base64</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- System Terminal Card -->
+    <div class="card console-card">
+      <div class="console-header">
+        <h3 class="card-title" style="margin-bottom:0;">💻 Core Diagnostics Stream</h3>
+        <div class="console-actions">
+          <button class="btn" onclick="clearConsole()">🧹 Clear Screen</button>
+          <button class="btn" onclick="downloadLogs()">📥 Download Logs</button>
+        </div>
+      </div>
+      <div class="terminal" id="terminal-screen">
+        <div class="log-line system-log">
+          <span class="log-time">[SYSTEM]</span>
+          <span class="log-content">Connecting to diagnostics log stream...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="copy-toast">Copied to clipboard!</div>
+
+  <script>
+    const term = document.getElementById('terminal-screen');
+    const statusBadge = document.getElementById('connection-status');
+    const statusText = document.getElementById('status-text');
+    const qrCard = document.getElementById('qr-card');
+    const infoCard = document.getElementById('info-card');
+    const mainGrid = document.getElementById('main-grid-element');
+    const qrImg = document.getElementById('qr-img');
+    const toast = document.getElementById('toast');
+
+    let currentStatus = null;
+    let eventSource = null;
+
+    function addLogLine(time, message, level = 'info') {
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'log-time';
+      timeSpan.textContent = '[' + time + ']';
+      
+      const contentSpan = document.createElement('span');
+      contentSpan.className = 'log-content log-' + level;
+      contentSpan.textContent = message;
+      
+      line.appendChild(timeSpan);
+      line.appendChild(contentSpan);
+      
+      term.appendChild(line);
+      
+      // Auto scroll
+      term.scrollTop = term.scrollHeight;
+    }
+
+    function addSystemLog(message) {
+      addLogLine(new Date().toLocaleTimeString(), message, 'system');
+    }
+
+    function clearConsole() {
+      term.innerHTML = '';
+      addSystemLog('Console cleared by administrator.');
+    }
+
+    function downloadLogs() {
+      const logs = Array.from(term.querySelectorAll('.log-line')).map(el => el.textContent).join('\\n');
+      const blob = new Blob([logs], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'whatsapp_bot_logs_' + Date.now() + '.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function showToast(text) {
+      toast.textContent = text;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    async function exportSession() {
+      try {
+        const res = await fetch('/session/export');
+        if (!res.ok) {
+          showToast('❌ Export failed or session not loaded.');
+          return;
+        }
+        const data = await res.json();
+        const b64 = data.WA_SESSION_B64 || data.base64;
+        if (b64) {
+          await navigator.clipboard.writeText(b64);
+          showToast('✅ Base64 Session token copied to clipboard!');
+        } else {
+          showToast('❌ Export failed - no token returned.');
+        }
+      } catch (err) {
+        showToast('❌ Connection error during export.');
+      }
+    }
+
+    // Poll status & handle grid state
+    async function checkStatus() {
+      try {
+        const res = await fetch('/bot-status');
+        const status = await res.json();
+        updateUI(status.connected, status.hasQR, status.qr);
+      } catch (err) {
+        // ignore errors
+      }
+    }
+
+    function updateUI(connected, hasQR, qr) {
+      if (connected) {
+        statusBadge.className = 'badge badge-connected';
+        statusText.textContent = 'WhatsApp Connected';
+        qrCard.style.display = 'none';
+        infoCard.style.display = 'flex';
+        mainGrid.className = 'main-grid main-grid-split';
+      } else if (hasQR && qr) {
+        statusBadge.className = 'badge badge-disconnected';
+        statusText.textContent = 'Link Device Pending';
+        infoCard.style.display = 'none';
+        qrCard.style.display = 'flex';
+        mainGrid.className = 'main-grid main-grid-split';
+        
+        if (qrImg.getAttribute('data-qr') !== qr) {
+          qrImg.setAttribute('data-qr', qr);
+          qrImg.src = '/qr-image?qr=' + encodeURIComponent(qr) + '&t=' + Date.now();
+          addSystemLog('New WhatsApp pairing QR generated.');
+        }
+      } else {
+        statusBadge.className = 'badge badge-connecting';
+        statusText.textContent = 'Connecting WhatsApp Sockets...';
+        qrCard.style.display = 'none';
+        infoCard.style.display = 'none';
+        mainGrid.className = 'main-grid';
+      }
+    }
+
+    // Set up SSE EventSource stream
+    function setupEventStream() {
+      if (eventSource) eventSource.close();
+      
+      eventSource = new EventSource('/bot-logs');
+      
+      eventSource.onopen = () => {
+        addSystemLog('Connected to core diagnostic stream.');
+      };
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const log = JSON.parse(event.data);
+          addLogLine(log.time, log.message, log.level);
+        } catch (err) {
+          // ignore
+        }
+      };
+      
+      eventSource.onerror = () => {
+        addLogLine(new Date().toLocaleTimeString(), 'Diagnostic stream connection lost. Retrying...', 'warn');
+        eventSource.close();
+        setTimeout(setupEventStream, 3000);
+      };
+    }
+
+    setupEventStream();
+    setInterval(checkStatus, 2500);
+    checkStatus();
+  </script>
+</body>
+</html>`);
 });
 
+/** Real-time Connection Status JSON Endpoint */
+app.get('/bot-status', (_req, res) => {
+  const { connected, hasQR, qr } = wa.getStatus();
+  res.json({ connected, hasQR, qr });
+});
+
+/** Server-Sent Events (SSE) Diagnostics Logs Stream */
+app.get('/bot-logs', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+
+  // Push historical logs immediately to catch up the terminal UI
+  const history = wa.getLogs() || [];
+  history.forEach(log => {
+    res.write(`data: ${JSON.stringify(log)}\n\n`);
+  });
+
+  // Client listener hook
+  const onLog = (log) => {
+    res.write(`data: ${JSON.stringify(log)}\n\n`);
+  };
+
+  global.logListeners.push(onLog);
+
+  req.on('close', () => {
+    global.logListeners = global.logListeners.filter(l => l !== onLog);
+  });
+});
 
 /** QR code JSON (for polling) */
 app.get('/qr', (_req, res) => {
@@ -233,20 +726,20 @@ app.get('/labels', requireApiKey, (_req, res) => {
 
 /**
  * POST /send-file
- * Body (multipart/form-data): phone, caption, file
+ * Body (multipart/form-data): phone, caption, files / file
  *
- * Sends a single arbitrary file (image, document, pdf) to the specified phone.
+ * Sends one or multiple arbitrary files (image, document, pdf) sequentially to the specified phone.
  */
-app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) => {
+app.post('/send-file', requireApiKey, upload.any(), async (req, res) => {
   console.log('--- [Railway Debug] Received /send-file request! ---');
   const { phone, caption, customText, branchTexts: branchTextsRaw, locationInfo: locationInfoRaw } = req.body;
-  const file         = req.file;
+  const files        = req.files || [];
   const branchTexts  = (() => { try { return JSON.parse(branchTextsRaw  || '[]'); } catch { return []; } })();
   const locationInfo = (() => { try { return JSON.parse(locationInfoRaw || '[]'); } catch { return []; } })();
-  const hasBranches    = Array.isArray(branchTexts)  && branchTexts.length  > 0;
-  const hasLocations   = Array.isArray(locationInfo) && locationInfo.length > 0;
-  const hasCaption     = typeof caption    === 'string' && caption.trim().length    > 0;
-  const hasCustomText  = typeof customText === 'string' && customText.trim().length > 0;
+  const hasBranches  = Array.isArray(branchTexts)  && branchTexts.length  > 0;
+  const hasLocations = Array.isArray(locationInfo) && locationInfo.length > 0;
+  const hasCaption   = typeof caption    === 'string' && caption.trim().length    > 0;
+  const hasCustomText = typeof customText === 'string' && customText.trim().length > 0;
 
   if (!phone || typeof phone !== 'string') {
     return res.status(400).json({ error: 'phone is required.' });
@@ -255,7 +748,7 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
   if (cleanPhone.length < 10 || cleanPhone.length > 15) {
     return res.status(400).json({ error: `Invalid phone: "${cleanPhone}".` });
   }
-  if (!file && !hasCaption && !hasCustomText && !hasBranches && !hasLocations) {
+  if (files.length === 0 && !hasCaption && !hasCustomText && !hasBranches && !hasLocations) {
     return res.status(400).json({ error: 'يجب توفير ملف أو رسالة أو موقع فرع على الأقل.' });
   }
   if (!wa.getStatus().connected) {
@@ -272,40 +765,41 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
     console.warn('WhatsApp number check failed, proceeding anyway:', checkErr.message);
   }
 
-  // Fix Arabic/non-ASCII filenames (only when a file is present)
-  const fileName = file
-    ? Buffer.from(file.originalname, 'latin1').toString('utf8')
-    : null;
-
   try {
-    if (file) {
-      await wa.sendMessage(cleanPhone, {
-        document: file.buffer,
-        mimetype: file.mimetype,
-        fileName: fileName,
-        caption: caption || ''
-      });
+    const sentFileNames = [];
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        const fileCaption = (i === 0) ? (caption || '') : '';
+        
+        wa.logEvent(`📎 Queuing file send [${i + 1}/${files.length}]: ${fileName}...`, 'info');
+        await wa.sendMessage(cleanPhone, {
+          document: file.buffer,
+          mimetype: file.mimetype,
+          fileName: fileName,
+          caption: fileCaption
+        });
+        sentFileNames.push(fileName);
+      }
     } else if (hasCaption) {
       await wa.sendMessage(cleanPhone, { text: caption.trim() });
     }
 
     // Custom text message after file
     if (hasCustomText) {
-      await delay(800);
       await wa.sendMessage(cleanPhone, { text: customText.trim() });
     }
 
-    // Native location pins (preferred)
+    // Native location pins
     if (hasLocations) {
       for (const loc of locationInfo) {
-        await delay(800);
         await wa.sendMessage(cleanPhone, { location: loc });
       }
     } else if (hasBranches) {
       // Fallback: text links
       for (const bt of branchTexts) {
         await wa.sendMessage(cleanPhone, { text: bt });
-        await delay(800);
       }
     }
 
@@ -322,8 +816,8 @@ app.post('/send-file', requireApiKey, upload.single('file'), async (req, res) =>
 
     return res.json({
       success: true,
-      message: 'File sent successfully',
-      fileName: fileName,
+      message: 'File(s) sent successfully',
+      fileNames: sentFileNames,
       labelStatus
     });
   } catch (err) {
@@ -486,7 +980,7 @@ app.use((_req, res) => res.status(404).json({ error: 'Route not found.' }));
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   console.log('');
   console.log('╔══════════════════════════════════════════╗');
   console.log('║   🏥 Clinic WhatsApp Offer Bot  v2       ║');
@@ -499,5 +993,32 @@ app.listen(PORT, async () => {
   console.log('');
   await wa.connect();
 });
+
+// ─── Graceful Shutdown Handlers ───────────────────────────────────────────────
+let isShuttingDown = false;
+const handleShutdown = async (signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\n🔌 Received ${signal}. Starting graceful shutdown...`);
+  
+  // Close Express server first
+  if (server) {
+    server.close(() => {
+      console.log('🚪 Express server stopped listening.');
+    });
+  }
+
+  try {
+    await wa.disconnectGracefully();
+  } catch (err) {
+    console.error('Error during WhatsApp disconnect:', err);
+  }
+  
+  console.log('👋 Clean exit. Bye!');
+  process.exit(0);
+};
+
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }

@@ -4,7 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const AUTH_DIR = path.resolve('./auth_info_baileys');
+const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
 
 /**
  * Restore WA session from WA_SESSION_B64 env var on boot.
@@ -28,33 +28,38 @@ function restoreSession() {
     
     const json = JSON.parse(jsonStr);
     fs.mkdirSync(AUTH_DIR, { recursive: true });
-    for (const [filename, content] of Object.entries(json)) {
-      fs.writeFileSync(path.join(AUTH_DIR, filename), typeof content === 'string' ? content : JSON.stringify(content));
+    
+    // Check if this is the new single creds.json format
+    if (json.noiseKey && json.signedIdentityKey) {
+      fs.writeFileSync(path.join(AUTH_DIR, 'creds.json'), JSON.stringify(json, null, 2));
+      console.log('✅ WA session restored directly from single creds.json format.');
+    } else {
+      // Older multi-file format (for backwards compatibility)
+      for (const [filename, content] of Object.entries(json)) {
+        fs.writeFileSync(path.join(AUTH_DIR, filename), typeof content === 'string' ? content : JSON.stringify(content));
+      }
+      console.log('✅ WA session restored from multi-file bundle format.');
     }
-    console.log('✅ WA session restored from WA_SESSION_B64 env var.');
   } catch (e) {
     console.warn('⚠️  Could not restore WA session:', e.message);
   }
 }
 
 /**
- * Read current auth_info_baileys/ and return as a compressed base64 string.
+ * Read only creds.json and return as a highly compressed base64 string.
  */
 function encodeSession() {
   try {
-    if (!fs.existsSync(AUTH_DIR)) return null;
-    const files = fs.readdirSync(AUTH_DIR);
-    if (files.length === 0) return null;
-    const data = {};
-    for (const f of files) {
-      try {
-        data[f] = JSON.parse(fs.readFileSync(path.join(AUTH_DIR, f), 'utf8'));
-      } catch {
-        data[f] = fs.readFileSync(path.join(AUTH_DIR, f), 'utf8');
-      }
+    const credsPath = path.join(AUTH_DIR, 'creds.json');
+    if (!fs.existsSync(credsPath)) {
+      console.warn('⚠️  creds.json not found in auth directory.');
+      return null;
     }
-    const jsonStr = JSON.stringify(data);
-    const compressed = zlib.deflateSync(jsonStr);
+    
+    const credsContent = fs.readFileSync(credsPath, 'utf8');
+    JSON.parse(credsContent); // Validate JSON
+    
+    const compressed = zlib.deflateSync(credsContent);
     return compressed.toString('base64');
   } catch (e) {
     console.error('encodeSession error:', e.message);

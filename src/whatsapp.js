@@ -44,9 +44,23 @@ let qrString = null;
 
 const labelsStore = {};   // labelId → { id, name, color }
 const chatLabels  = {};   // jid     → Set<labelId>
+const systemLogs  = [];   // memory ring buffer of system logs
+
+function logEvent(message, level = 'info') {
+  const time = new Date().toLocaleTimeString('ar-SA');
+  const levelIcon = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : 'ℹ️';
+  const formatted = `${levelIcon} ${message}`;
+  console.log(`[${time}] ${formatted}`);
+  systemLogs.push({ time, message: formatted, level });
+  if (systemLogs.length > 50) systemLogs.shift();
+  if (global.broadcastLog) {
+    global.broadcastLog({ time, message: formatted, level });
+  }
+}
 
 const getStatus = () => ({ connected: isReady, hasQR: !!qrString, qr: qrString });
 const getLabels = () => labelsStore;
+const getLogs   = () => systemLogs;
 
 // ─── Label cache ──────────────────────────────────────────────────────────────
 function loadLabelCache() {
@@ -118,7 +132,16 @@ async function connect() {
   restoreSession();   // Restore session from WA_SESSION_B64 env var (Back4App / cloud)
   loadLabelCache();
 
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
+  const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
+  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  
+  // In-memory bypass: if credentials (creds.me) exist but registered is false (common on abrupt shutdowns),
+  // force it to true so Baileys attempts to reconnect instead of redundantly asking for a QR scan.
+  if (state.creds && state.creds.me && !state.creds.registered) {
+    console.log('💡 [Auth] Found active credentials in creds.json but registered was false. Restoring registered: true to bypass QR scan.');
+    state.creds.registered = true;
+  }
+
   const { version }          = await fetchLatestBaileysVersion();
 
   sock = makeWASocket({
@@ -194,21 +217,30 @@ async function connect() {
       const sender = msg.key.remoteJid;
       if (!sender || sender.endsWith('@g.us')) continue;
 
-      const mohLabelId = findLabelId(MOH_LABEL);
+      const senderPhone = sender.replace('@s.whatsapp.net', '');
+      const pushName    = msg.pushName || '';
 
-      // Debug: always log what labels we know for this sender
+      const mohLabelId = findLabelId(MOH_LABEL);
       const knownLabels = [
         ...(chatLabels[sender] || new Set()),
-        ...(chatLabels[sender.replace('@s.whatsapp.net', '')] || new Set()),
+        ...(chatLabels[senderPhone] || new Set()),
       ];
-      if (knownLabels.length > 0) {
-        console.log(`📩 Message from ${sender} — labels: [${knownLabels.join(', ')}] — MOH ID: ${mohLabelId}`);
-      }
 
-      const isMOH = mohLabelId && knownLabels.includes(mohLabelId);
+      const isMOHLabel    = mohLabelId && knownLabels.includes(mohLabelId);
+      const isMOHNumber   = MOH_NUMBERS.includes(senderPhone);
+      const isMOHPushName = pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || pushName.toLowerCase().includes('moh');
+      const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName;
 
-      if (isMOH && FORWARD_NUMBERS.length > 0) {
-        console.log(`\n📨 وزارة الصحة message from ${sender} — notifying admins...`);
+      // Log receipt and classification to diagnostics console
+      logEvent(`📩 Incoming message from +${senderPhone} (${pushName || 'No Name'})`, 'info');
+
+      if (isMOH) {
+        logEvent(`🚨 وزارة الصحة (MOH) message detected from +${senderPhone}! (Labels: [${knownLabels.join(', ')}], Match Number: ${isMOHNumber}, Match Name: ${isMOHPushName})`, 'warn');
+
+        if (FORWARD_NUMBERS.length === 0) {
+          logEvent(`⚠️ Alert forwarding aborted: FORWARD_NUMBERS is empty in .env.`, 'warn');
+          continue;
+        }
 
         const c = msg.message;
         const preview =
@@ -222,19 +254,21 @@ async function connect() {
            c?.videoMessage    ? '(فيديو)'         :
            c?.documentMessage ? '(ملف)'           : '(رسالة جديدة)');
 
-        const senderPhone = sender.replace('@s.whatsapp.net', '');
         const notification =
-          `🔔 *تنبيه — رسالة جديدة من وزارة الصحة*\n\n` +
+          `🚨 *تنبيه عاجل — رسالة جديدة من وزارة الصحة* 🚨\n\n` +
           `📱 المرسل: +${senderPhone}\n` +
+          `👤 الاسم: ${pushName}\n` +
           `💬 الرسالة: ${preview}\n\n` +
-          `يرجى فتح واتساب والرد على الرسالة.`;
+          `يرجى فتح واتساب والرد على الرسالة فوراً.`;
+
+        logEvent(`📨 Forwarding emergency alerts to admins: [+${FORWARD_NUMBERS.join(', +')}]`, 'info');
 
         for (const num of FORWARD_NUMBERS) {
           try {
             await sock.sendMessage(`${num}@s.whatsapp.net`, { text: notification });
-            console.log(`   ✅ Notified +${num}`);
+            logEvent(`   ✅ Alert forwarded successfully to +${num}`, 'info');
           } catch (err) {
-            console.error(`   ❌ Failed → +${num}: ${err.message}`);
+            logEvent(`   ❌ Alert forwarding failed to +${num}: ${err.message}`, 'error');
           }
         }
       }
@@ -299,8 +333,50 @@ async function connect() {
   });
 }
 
+// ─── Queue Manager (Anti-Spam / Anti-Ban) ────────────────────────────────────
+const messageQueue = [];
+let isQueueProcessing = false;
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function processMessageQueue() {
+  if (isQueueProcessing || messageQueue.length === 0) return;
+  isQueueProcessing = true;
+
+  while (messageQueue.length > 0) {
+    const task = messageQueue.shift();
+    try {
+      // Dynamic jitter to emulate human typing intervals
+      const jitter = Math.floor(Math.random() * 2000) + 3000; // 3000ms to 5000ms delay
+      logEvent(`⏳ Spacing out message to +${task.phone}... waiting ${jitter / 1000}s`, 'info');
+      await delay(jitter);
+
+      logEvent(`🚀 Sending queued block to +${task.phone}...`, 'info');
+      const res = await sendMessageDirect(task.phone, task.payload);
+      
+      logEvent(`✅ Message block sent to +${task.phone} successfully.`, 'info');
+      if (task.resolve) task.resolve(res);
+    } catch (err) {
+      logEvent(`❌ Failed to send queued message to +${task.phone}: ${err.message}`, 'error');
+      if (task.reject) task.reject(err);
+    }
+  }
+  isQueueProcessing = false;
+}
+
+function enqueueMessage(phone, payload) {
+  return new Promise((resolve, reject) => {
+    messageQueue.push({ phone, payload, resolve, reject });
+    processMessageQueue();
+  });
+}
+
 // ─── Send ─────────────────────────────────────────────────────────────────────
 async function sendMessage(phone, payload) {
+  return enqueueMessage(phone, payload);
+}
+
+async function sendMessageDirect(phone, payload) {
   if (!sock || !isReady) throw new Error('WhatsApp is not connected yet.');
   const jid = `${phone}@s.whatsapp.net`;
 
@@ -318,7 +394,7 @@ async function sendMessage(phone, payload) {
       await sock.sendMessage(jid, { image: { url: img }, caption: payload.caption || '' });
     } else {
       // Unknown format — skip image, just send caption as text
-      console.warn(`⚠️  Unrecognised image format, skipping image for: ${payload.caption}`);
+      logEvent(`⚠️ Unrecognized image format, skipping image for: ${payload.caption}`, 'warn');
       if (payload.caption) {
         await sock.sendMessage(jid, { text: payload.caption });
       }
@@ -359,10 +435,26 @@ async function isRegisteredNumber(phone) {
     const [result] = await sock.onWhatsApp(jid);
     return !!(result && result.exists);
   } catch (err) {
-    console.warn(`⚠️  Could not verify WhatsApp registration for +${phone}: ${err.message}`);
+    logEvent(`⚠️ Could not verify WhatsApp registration for +${phone}: ${err.message}`, 'warn');
     // On unexpected errors, allow the send to proceed (fail-open)
     return true;
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber };
+// ─── Graceful Shutdown ────────────────────────────────────────────────────────
+async function disconnectGracefully() {
+  if (sock) {
+    logEvent('🔌 Closing WhatsApp socket connection gracefully...', 'info');
+    try {
+      // Remove all connection update listeners to prevent auto-reconnect loops on exit
+      sock.ev.removeAllListeners('connection.update');
+      sock.end(undefined);
+      // Wait a moment for pending writes to flush
+      await new Promise(r => setTimeout(r, 600));
+    } catch (err) {
+      console.error('Error closing WhatsApp socket:', err.message);
+    }
+  }
+}
+
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully };
