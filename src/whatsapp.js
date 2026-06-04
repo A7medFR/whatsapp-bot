@@ -64,6 +64,7 @@ const MOH_NUMBERS = (process.env.MOH_NUMBERS || '')
   .split(',').map(n => cleanAndNormalizePhone(n)).filter(Boolean);
 
 const LABELS_FILE    = path.resolve('./labels_cache.json');
+const CHAT_LABELS_FILE = path.resolve('./chat_labels_cache.json');
 
 // Anti-Ban & Queue configurations
 const MIN_QUEUE_DELAY = parseInt(process.env.MIN_QUEUE_DELAY_MS || '6000', 10);
@@ -113,6 +114,28 @@ function loadLabelCache() {
 function saveLabelCache() {
   try { fs.writeFileSync(LABELS_FILE, JSON.stringify(labelsStore, null, 2), 'utf8'); }
   catch (_) { /* ignore */ }
+}
+
+function loadChatLabelsCache() {
+  try {
+    if (fs.existsSync(CHAT_LABELS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CHAT_LABELS_FILE, 'utf8'));
+      for (const [jid, arr] of Object.entries(data)) {
+        chatLabels[jid] = new Set(arr);
+      }
+      logEvent(`📋 Loaded ${Object.keys(chatLabels).length} chat-label mapping(s) from cache.`, 'info');
+    }
+  } catch (_) { /* ignore */ }
+}
+
+function saveChatLabelsCache() {
+  try {
+    const data = {};
+    for (const [jid, set] of Object.entries(chatLabels)) {
+      data[jid] = Array.from(set);
+    }
+    fs.writeFileSync(CHAT_LABELS_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (_) { /* ignore */ }
 }
 
 // ─── Label helpers ────────────────────────────────────────────────────────────
@@ -167,6 +190,7 @@ async function addLabelToChat(phone, labelName) {
 async function connect() {
   restoreSession();   // Restore session from WA_SESSION_B64 env var (Back4App / cloud)
   loadLabelCache();
+  loadChatLabelsCache();
 
   const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
