@@ -209,21 +209,21 @@ async function connect() {
   });
 
   // ── Track label-chat associations via label events ─────────────────────────
-  sock.ev.on('label-association.upsert', (data) => {
-    console.log('🔍 [DEBUG] label-association.upsert:', JSON.stringify(data));
-    const list = Array.isArray(data) ? data : (data?.associations || []);
-    for (const a of list) {
+  sock.ev.on('labels.association', (data) => {
+    const updates = Array.isArray(data) ? data : [data];
+    for (const u of updates) {
+      const a = u?.association;
+      const action = u?.type; // 'add' or 'remove'
       if (!a?.chatId || !a?.labelId) continue;
-      if (!chatLabels[a.chatId]) chatLabels[a.chatId] = new Set();
-      chatLabels[a.chatId].add(String(a.labelId));
-    }
-  });
-
-  sock.ev.on('label-association.delete', (data) => {
-    const list = Array.isArray(data) ? data : (data?.associations || []);
-    for (const a of list) {
-      if (a?.chatId && a?.labelId) {
-        chatLabels[a.chatId]?.delete(String(a.labelId));
+      
+      const labelIdStr = String(a.labelId);
+      if (action === 'add') {
+        if (!chatLabels[a.chatId]) chatLabels[a.chatId] = new Set();
+        chatLabels[a.chatId].add(labelIdStr);
+        console.log(`🏷️ Label associated: Chat ${a.chatId} -> Label ID ${labelIdStr}`);
+      } else if (action === 'remove') {
+        chatLabels[a.chatId]?.delete(labelIdStr);
+        console.log(`🏷️ Label disassociated: Chat ${a.chatId} -> Label ID ${labelIdStr}`);
       }
     }
   });
