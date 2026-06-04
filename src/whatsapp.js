@@ -283,6 +283,9 @@ async function connect() {
       let resolvedPhone = null;
       let resolvedJid = null;
 
+      logEvent(`🔍 [DEBUG] msg.key is: ${JSON.stringify(msg.key)}`, 'info');
+      logEvent(`🔍 [DEBUG] chatLabels has ${Object.keys(chatLabels).length} chats: ${JSON.stringify(Object.keys(chatLabels).slice(0, 10))}`, 'info');
+
       if (msg.key?.remoteJidAlt && msg.key.remoteJidAlt.endsWith('@s.whatsapp.net')) {
         resolvedJid = msg.key.remoteJidAlt;
         resolvedPhone = resolvedJid.replace('@s.whatsapp.net', '');
