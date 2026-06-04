@@ -282,7 +282,16 @@ async function connect() {
       // Resolve LID JIDs to Phone Numbers (PNs)
       let resolvedPhone = null;
       let resolvedJid = null;
-      if (sender.endsWith('@lid')) {
+
+      if (msg.key?.remoteJidAlt && msg.key.remoteJidAlt.endsWith('@s.whatsapp.net')) {
+        resolvedJid = msg.key.remoteJidAlt;
+        resolvedPhone = resolvedJid.replace('@s.whatsapp.net', '');
+      } else if (msg.key?.participantAlt && msg.key.participantAlt.endsWith('@s.whatsapp.net')) {
+        resolvedJid = msg.key.participantAlt;
+        resolvedPhone = resolvedJid.replace('@s.whatsapp.net', '');
+      }
+
+      if (!resolvedPhone && sender.endsWith('@lid')) {
         try {
           const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(sender);
           if (pn) {
