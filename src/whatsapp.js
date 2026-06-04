@@ -21,8 +21,37 @@ const path   = require('path');
 const { restoreSession } = require('./session');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
+function cleanAndNormalizePhone(phone) {
+  return phone.replace(/\D/g, '');
+}
+
+function phoneNumbersMatch(phone1, phone2) {
+  const p1 = phone1.replace(/\D/g, '');
+  const p2 = phone2.replace(/\D/g, '');
+  if (!p1 || !p2) return false;
+  if (p1 === p2) return true;
+  // If both numbers are international/long enough (e.g. 9 or more digits), compare suffixes
+  if (p1.length >= 9 && p2.length >= 9) {
+    return p1.endsWith(p2) || p2.endsWith(p1);
+  }
+  return false;
+}
+
+function formatJidNumber(phone) {
+  let clean = phone.replace(/\D/g, '');
+  // If it starts with local Saudi prefix '05' (10 digits total), convert to international '9665...'
+  if (clean.startsWith('05') && clean.length === 10) {
+    clean = '966' + clean.slice(1);
+  }
+  // If it's a mobile number without country code but has 9 digits (e.g. '5xxxxxxxx'), prepend '966'
+  else if (clean.startsWith('5') && clean.length === 9) {
+    clean = '966' + clean;
+  }
+  return clean;
+}
+
 const FORWARD_NUMBERS = (process.env.FORWARD_NUMBERS || '')
-  .split(',').map(n => n.replace(/\D/g, '')).filter(Boolean);
+  .split(',').map(n => formatJidNumber(n)).filter(Boolean);
 
 const LEADS_LABEL    = process.env.LEADS_LABEL_NAME || 'ليدز باتريكس 1';
 const LEADS_LABEL_ID = (process.env.LEADS_LABEL_ID  || '').trim();
@@ -32,10 +61,17 @@ const MOH_LABEL_ID   = (process.env.MOH_LABEL_ID    || '').trim();
 // Phone numbers of وزارة الصحة contacts (digits only, with country code)
 // The bot will notify admins whenever a message arrives from any of these numbers
 const MOH_NUMBERS = (process.env.MOH_NUMBERS || '')
-  .split(',').map(n => n.replace(/\D/g, '')).filter(Boolean);
+  .split(',').map(n => cleanAndNormalizePhone(n)).filter(Boolean);
 
 const LABELS_FILE    = path.resolve('./labels_cache.json');
 
+// Anti-Ban & Queue configurations
+const MIN_QUEUE_DELAY = parseInt(process.env.MIN_QUEUE_DELAY_MS || '6000', 10);
+const MAX_QUEUE_DELAY = parseInt(process.env.MAX_QUEUE_DELAY_MS || '12000', 10);
+const BATCH_SIZE_LIMIT = parseInt(process.env.BATCH_SIZE_LIMIT || '10', 10);
+const BATCH_COOLDOWN = parseInt(process.env.BATCH_COOLDOWN_MS || '25000', 10);
+const SIMULATE_TYPING = process.env.SIMULATE_TYPING !== 'false';
+const SIMULATE_READ_RECEIPTS = process.env.SIMULATE_READ_RECEIPTS !== 'false';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let sock     = null;
@@ -83,10 +119,10 @@ function saveLabelCache() {
 function findLabelId(labelName) {
   // 1. Look up by name in store (populated by passive events if available)
   const entry = Object.entries(labelsStore).find(([, l]) => l.name === labelName);
-  if (entry) return entry[0];
+  if (entry) return String(entry[0]);
   // 2. Manual overrides from .env
-  if (labelName === LEADS_LABEL && LEADS_LABEL_ID) return LEADS_LABEL_ID;
-  if (labelName === MOH_LABEL   && MOH_LABEL_ID)   return MOH_LABEL_ID;
+  if (labelName === LEADS_LABEL && LEADS_LABEL_ID) return String(LEADS_LABEL_ID);
+  if (labelName === MOH_LABEL   && MOH_LABEL_ID)   return String(MOH_LABEL_ID);
   return null;
 }
 
@@ -148,7 +184,7 @@ async function connect() {
     version,
     auth:   state,
     logger: pino({ level: 'silent' }),
-    browser: ['Ubuntu', 'Chrome', '20.0.04'],
+    browser: ['Windows', 'Chrome', '122.0.0.0'],
     connectTimeoutMs:      30000,
     defaultQueryTimeoutMs: 60000,
     keepAliveIntervalMs:   25000,
@@ -179,13 +215,17 @@ async function connect() {
     for (const a of list) {
       if (!a?.chatId || !a?.labelId) continue;
       if (!chatLabels[a.chatId]) chatLabels[a.chatId] = new Set();
-      chatLabels[a.chatId].add(a.labelId);
+      chatLabels[a.chatId].add(String(a.labelId));
     }
   });
 
   sock.ev.on('label-association.delete', (data) => {
     const list = Array.isArray(data) ? data : (data?.associations || []);
-    for (const a of list) chatLabels[a?.chatId]?.delete(a?.labelId);
+    for (const a of list) {
+      if (a?.chatId && a?.labelId) {
+        chatLabels[a.chatId]?.delete(String(a.labelId));
+      }
+    }
   });
 
   // ── Also extract label data from chat sync (chats.upsert fires on connect) ─
@@ -197,8 +237,16 @@ async function connect() {
       if (!jid || !labels.length) continue;
       if (!chatLabels[jid]) chatLabels[jid] = new Set();
       for (const lId of labels) {
-        chatLabels[jid].add(typeof lId === 'string' ? lId : lId?.id || lId?.labelId);
-        found++;
+        let idVal = null;
+        if (typeof lId === 'string' || typeof lId === 'number') {
+          idVal = String(lId);
+        } else if (lId && (lId.id || lId.labelId)) {
+          idVal = String(lId.id || lId.labelId);
+        }
+        if (idVal) {
+          chatLabels[jid].add(idVal);
+          found++;
+        }
       }
     }
     if (found > 0) console.log(`🏷️  Loaded ${found} label association(s) from chat sync.`);
@@ -218,21 +266,33 @@ async function connect() {
       if (!sender || sender.endsWith('@g.us')) continue;
 
       const senderPhone = sender.replace('@s.whatsapp.net', '');
+      
+      // Simulate reading the message (anti-ban read receipt simulation)
+      if (SIMULATE_READ_RECEIPTS && sock) {
+        try {
+          await sock.readMessages([msg.key]);
+          logEvent(`🔵 Marked message read from +${senderPhone}`, 'info');
+        } catch (readErr) {
+          // Ignore read errors
+        }
+      }
+
       const pushName    = msg.pushName || '';
 
       const mohLabelId = findLabelId(MOH_LABEL);
       const knownLabels = [
         ...(chatLabels[sender] || new Set()),
         ...(chatLabels[senderPhone] || new Set()),
-      ];
+      ].map(String);
 
-      const isMOHLabel    = mohLabelId && knownLabels.includes(mohLabelId);
-      const isMOHNumber   = MOH_NUMBERS.includes(senderPhone);
+      const isMOHLabel    = mohLabelId && knownLabels.includes(String(mohLabelId));
+      const isMOHNumber   = MOH_NUMBERS.some(num => phoneNumbersMatch(senderPhone, num));
       const isMOHPushName = pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || pushName.toLowerCase().includes('moh');
       const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName;
 
       // Log receipt and classification to diagnostics console
       logEvent(`📩 Incoming message from +${senderPhone} (${pushName || 'No Name'})`, 'info');
+      logEvent(`🔍 MOH Check details for +${senderPhone} -> isMOHLabel: ${isMOHLabel} (Label ID: ${mohLabelId}, Chat Labels: [${knownLabels.join(', ')}]), isMOHNumber: ${isMOHNumber} (MOH list: [${MOH_NUMBERS.join(', ')}]), isMOHPushName: ${isMOHPushName}`, 'info');
 
       if (isMOH) {
         logEvent(`🚨 وزارة الصحة (MOH) message detected from +${senderPhone}! (Labels: [${knownLabels.join(', ')}], Match Number: ${isMOHNumber}, Match Name: ${isMOHPushName})`, 'warn');
@@ -336,6 +396,7 @@ async function connect() {
 // ─── Queue Manager (Anti-Spam / Anti-Ban) ────────────────────────────────────
 const messageQueue = [];
 let isQueueProcessing = false;
+let messagesSentInCurrentBatch = 0;
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -344,17 +405,26 @@ async function processMessageQueue() {
   isQueueProcessing = true;
 
   while (messageQueue.length > 0) {
+    // Check batch limit
+    if (messagesSentInCurrentBatch >= BATCH_SIZE_LIMIT) {
+      logEvent(`⏳ Batch size limit reached (${BATCH_SIZE_LIMIT}). Cooling down for ${BATCH_COOLDOWN / 1000}s to mimic human break...`, 'warn');
+      await delay(BATCH_COOLDOWN);
+      messagesSentInCurrentBatch = 0;
+    }
+
     const task = messageQueue.shift();
     try {
-      // Dynamic jitter to emulate human typing intervals
-      const jitter = Math.floor(Math.random() * 2000) + 3000; // 3000ms to 5000ms delay
+      // Dynamic jitter to space out queued messages
+      const jitterRange = MAX_QUEUE_DELAY - MIN_QUEUE_DELAY;
+      const jitter = Math.floor(Math.random() * (jitterRange > 0 ? jitterRange : 1000)) + MIN_QUEUE_DELAY;
       logEvent(`⏳ Spacing out message to +${task.phone}... waiting ${jitter / 1000}s`, 'info');
       await delay(jitter);
 
       logEvent(`🚀 Sending queued block to +${task.phone}...`, 'info');
       const res = await sendMessageDirect(task.phone, task.payload);
       
-      logEvent(`✅ Message block sent to +${task.phone} successfully.`, 'info');
+      messagesSentInCurrentBatch++;
+      logEvent(`✅ Message block sent to +${task.phone} successfully. (Batch progress: ${messagesSentInCurrentBatch}/${BATCH_SIZE_LIMIT})`, 'info');
       if (task.resolve) task.resolve(res);
     } catch (err) {
       logEvent(`❌ Failed to send queued message to +${task.phone}: ${err.message}`, 'error');
@@ -379,6 +449,20 @@ async function sendMessage(phone, payload) {
 async function sendMessageDirect(phone, payload) {
   if (!sock || !isReady) throw new Error('WhatsApp is not connected yet.');
   const jid = `${phone}@s.whatsapp.net`;
+
+  // Simulating typing/composing presence update before sending to mimic human behavior
+  if (SIMULATE_TYPING) {
+    try {
+      await sock.sendPresenceUpdate('composing', jid);
+      // Simulate realistic typing time (e.g. 1.5 to 3.5 seconds)
+      const typingTime = Math.floor(Math.random() * 2000) + 1500;
+      logEvent(`💬 Simulating typing to +${phone} for ${typingTime / 1000}s...`, 'info');
+      await delay(typingTime);
+      await sock.sendPresenceUpdate('paused', jid);
+    } catch (presenceErr) {
+      // Ignore errors when sending presence status
+    }
+  }
 
   if (payload.image) {
     const img = payload.image;
