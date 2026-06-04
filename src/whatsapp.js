@@ -249,12 +249,13 @@ async function connect() {
         }
       }
     }
-    if (found > 0) console.log(`🏷️  Loaded ${found} label association(s) from chat sync.`);
+    if (found > 0) logEvent(`🏷️  Loaded ${found} label association(s) from chat sync.`, 'info');
   };
 
   sock.ev.on('chats.upsert',  (chats) => extractChatLabels(chats));
   sock.ev.on('chats.update',  (chats) => extractChatLabels(chats));
   sock.ev.on('chats.set',     ({ chats } = {}) => extractChatLabels(chats));
+  sock.ev.on('messaging-history.set', ({ chats } = {}) => extractChatLabels(chats));
 
   // ── Notify admin when a وزارة الصحة labeled chat sends a message ──────────
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
