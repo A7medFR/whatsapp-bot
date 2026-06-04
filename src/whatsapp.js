@@ -279,20 +279,43 @@ async function connect() {
 
       const pushName    = msg.pushName || '';
 
+      // Resolve LID JIDs to Phone Numbers (PNs)
+      let resolvedPhone = null;
+      let resolvedJid = null;
+      if (sender.endsWith('@lid')) {
+        try {
+          const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(sender);
+          if (pn) {
+            resolvedJid = pn;
+            resolvedPhone = pn.replace('@s.whatsapp.net', '');
+          }
+        } catch (lidErr) {
+          // Ignore lookup errors
+        }
+      }
+
       const mohLabelId = findLabelId(MOH_LABEL);
       const knownLabels = [
         ...(chatLabels[sender] || new Set()),
         ...(chatLabels[senderPhone] || new Set()),
+        ...(resolvedJid ? (chatLabels[resolvedJid] || new Set()) : []),
+        ...(resolvedPhone ? (chatLabels[resolvedPhone] || new Set()) : []),
       ].map(String);
 
       const isMOHLabel    = mohLabelId && knownLabels.includes(String(mohLabelId));
-      const isMOHNumber   = MOH_NUMBERS.some(num => phoneNumbersMatch(senderPhone, num));
+      
+      // Compare both sender JID phone and the resolved PN phone against the MOH list
+      const isMOHNumber   = MOH_NUMBERS.some(num => 
+        phoneNumbersMatch(senderPhone, num) || (resolvedPhone && phoneNumbersMatch(resolvedPhone, num))
+      );
+      
       const isMOHPushName = pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || pushName.toLowerCase().includes('moh');
       const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName;
 
       // Log receipt and classification to diagnostics console
-      logEvent(`📩 Incoming message from +${senderPhone} (${pushName || 'No Name'})`, 'info');
-      logEvent(`🔍 MOH Check details for +${senderPhone} -> isMOHLabel: ${isMOHLabel} (Label ID: ${mohLabelId}, Chat Labels: [${knownLabels.join(', ')}]), isMOHNumber: ${isMOHNumber} (MOH list: [${MOH_NUMBERS.join(', ')}]), isMOHPushName: ${isMOHPushName}`, 'info');
+      const displaySender = resolvedPhone ? `${senderPhone} (PN: ${resolvedPhone})` : senderPhone;
+      logEvent(`📩 Incoming message from +${displaySender} (${pushName || 'No Name'})`, 'info');
+      logEvent(`🔍 MOH Check details for +${displaySender} -> isMOHLabel: ${isMOHLabel} (Label ID: ${mohLabelId}, Chat Labels: [${knownLabels.join(', ')}]), isMOHNumber: ${isMOHNumber} (MOH list: [${MOH_NUMBERS.join(', ')}]), isMOHPushName: ${isMOHPushName}`, 'info');
 
       if (isMOH) {
         logEvent(`🚨 وزارة الصحة (MOH) message detected from +${senderPhone}! (Labels: [${knownLabels.join(', ')}], Match Number: ${isMOHNumber}, Match Name: ${isMOHPushName})`, 'warn');
