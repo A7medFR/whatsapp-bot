@@ -585,6 +585,35 @@ async function isRegisteredNumber(phone) {
   }
 }
 
+// ─── Export Labeled Numbers Utility ───────────────────────────────────────────
+async function getMOHNumbersFromLabels() {
+  const mohLabelId = findLabelId(MOH_LABEL) || '14';
+  const phoneNumbers = new Set();
+
+  for (const [jid, labels] of Object.entries(chatLabels)) {
+    if (labels && labels.has(mohLabelId)) {
+      let phone = jid.replace('@s.whatsapp.net', '');
+      
+      // Try to resolve LID JIDs
+      if (jid.endsWith('@lid')) {
+        try {
+          const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(jid);
+          if (pn) {
+            phone = pn.replace('@s.whatsapp.net', '');
+          }
+        } catch (_) {}
+      }
+      
+      const cleanPhone = phone.replace(/\D/g, '');
+      if (cleanPhone && !phone.includes('@lid')) {
+        phoneNumbers.add(cleanPhone);
+      }
+    }
+  }
+  
+  return Array.from(phoneNumbers);
+}
+
 // ─── Graceful Shutdown ────────────────────────────────────────────────────────
 async function disconnectGracefully() {
   if (sock) {
@@ -601,4 +630,4 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels };

@@ -465,7 +465,14 @@ app.get('/', async (_req, res) => {
           <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
             Export your WhatsApp token session directly to keep it persistently authenticated in Railway / Back4App / cloud hosting.
           </p>
-          <button class="btn btn-export" onclick="exportSession()" style="width:100%; justify-content:center; padding:10px;">💾 Export Session Base64</button>
+          <button class="btn btn-export" onclick="exportSession()" style="width:100%; justify-content:center; padding:10px; margin-bottom:12px;">💾 Export Session Base64</button>
+        </div>
+        <div>
+          <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">MOH NUMBERS EXTRACTION</h4>
+          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
+            Extract all phone numbers currently labeled as "وزارة الصحة" on your phone to add them to your Railway variables.
+          </p>
+          <button class="btn btn-export" onclick="exportMOHNumbers()" style="width:100%; justify-content:center; padding:10px; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #a7f3d0;">📋 Extract MOH Numbers</button>
         </div>
       </div>
     </div>
@@ -569,6 +576,26 @@ app.get('/', async (_req, res) => {
         }
       } catch (err) {
         showToast('❌ Connection error during export.');
+      }
+    }
+
+    async function exportMOHNumbers() {
+      try {
+        const res = await fetch('/export-moh-numbers');
+        if (!res.ok) {
+          showToast('❌ Extraction failed.');
+          return;
+        }
+        const data = await res.json();
+        const commaSeparated = data.commaSeparated;
+        if (commaSeparated) {
+          await navigator.clipboard.writeText(commaSeparated);
+          showToast('✅ Copied ' + data.count + ' MOH number(s) to clipboard!');
+        } else {
+          showToast('ℹ️ No MOH labeled numbers found.');
+        }
+      } catch (err) {
+        showToast('❌ Connection error during extraction.');
       }
     }
 
@@ -707,6 +734,27 @@ app.get('/session/export', (_req, res) => {
     base64Length: b64.length,
     base64: b64
   });
+});
+
+/** Export MOH Labeled Numbers */
+app.get('/export-moh-numbers', async (_req, res) => {
+  try {
+    const list = await wa.getMOHNumbersFromLabels();
+    const joined = list.join(',');
+    
+    // Save to a file in the workspace
+    fs.writeFileSync(path.resolve('./extracted_moh_numbers.txt'), joined, 'utf8');
+    
+    res.json({
+      success: true,
+      count: list.length,
+      numbers: list,
+      commaSeparated: joined,
+      message: "Comma-separated numbers list has been written to extracted_moh_numbers.txt and returned below."
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
