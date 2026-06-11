@@ -267,6 +267,28 @@ async function processMOHMessagePipeline(msg, sock) {
   let complaints = loadComplaintsCache();
   const existingForPhone = complaints.filter(c => c.phone === phone);
 
+  // Hardcoded Instant Close Rule:
+  // If we send an attachment file, it instantly changes the status to CLOSED, locking the counter.
+  if (fromMe && hasAtt) {
+    const active = existingForPhone.find(c => c.status === 'OPEN');
+    if (active) {
+      const target = complaints.find(c => c.complaintId === active.complaintId);
+      if (target) {
+        target.status = 'CLOSED';
+        target.closeDate = new Date().toISOString();
+        target.messages.push({
+          timestamp: new Date().toISOString(),
+          text: text || '[ملف مرفق مرسل من العيادة - تم إغلاق الشكوى]',
+          fromMe: true,
+          hasAttachment: true
+        });
+        saveComplaintsCache(complaints);
+        logEvent(`✅ Outbound attachment sent. Instantly CLOSED complaint ${target.complaintId}.`, 'info');
+      }
+    }
+    return; // Done
+  }
+
   // Invoke Gemini service to make the decision
   const decision = await geminiService.processMessageEvent({
     phone,
@@ -552,7 +574,10 @@ async function connect() {
       );
       
       const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || pushName.toLowerCase().includes('moh'));
-      const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName;
+      
+      const complaints = loadComplaintsCache();
+      const hasActiveComplaint = complaints.some(c => c.phone === senderPhone && c.status === 'OPEN');
+      const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName || hasActiveComplaint;
 
       if (isMOH) {
         // Run state machine complaints tracker pipeline
