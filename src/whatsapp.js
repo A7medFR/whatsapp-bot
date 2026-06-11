@@ -170,7 +170,7 @@ function getComplaintsStore() {
 
 function closeComplaint(complaintId) {
   const complaints = loadComplaintsCache();
-  const complaint = complaints.find(c => c.complaintId === complaintId);
+  const complaint = complaints.find(c => c.complaintId === complaintId || c.ticketId === complaintId);
   if (complaint) {
     complaint.status = 'CLOSED';
     complaint.closeDate = new Date().toISOString();
@@ -272,7 +272,7 @@ async function processMOHMessagePipeline(msg, sock) {
   if (fromMe && hasAtt) {
     const active = existingForPhone.find(c => c.status === 'OPEN');
     if (active) {
-      const target = complaints.find(c => c.complaintId === active.complaintId);
+      const target = complaints.find(c => c.complaintId === active.complaintId || c.ticketId === active.ticketId);
       if (target) {
         target.status = 'CLOSED';
         target.closeDate = new Date().toISOString();
@@ -283,7 +283,7 @@ async function processMOHMessagePipeline(msg, sock) {
           hasAttachment: true
         });
         saveComplaintsCache(complaints);
-        logEvent(`✅ Outbound attachment sent. Instantly CLOSED complaint ${target.complaintId}.`, 'info');
+        logEvent(`✅ Outbound attachment sent. Instantly CLOSED complaint ${target.complaintId || target.ticketId}.`, 'info');
       }
     }
     return; // Done
@@ -298,13 +298,16 @@ async function processMOHMessagePipeline(msg, sock) {
     existingComplaints: existingForPhone
   });
 
-  if (decision.action === 'OPEN_COMPLAINT') {
-    const complaintId = `complaint_${phone}_${Math.floor(Date.now() / 1000)}`;
+  const action = decision.action;
+  const targetId = decision.targetTicketId || decision.matchedComplaintId;
+
+  if (action === 'CREATE' || action === 'OPEN_COMPLAINT') {
+    const finalTicketId = decision.extractedTicketId || `complaint_${phone}_${Math.floor(Date.now() / 1000)}`;
     const newComplaint = {
-      complaintId,
+      complaintId: finalTicketId,
+      ticketId: finalTicketId,
       phone,
       name: msg.pushName || 'وزارة الصحة',
-      // Store both styles for absolute safety and backward compatibility
       senderPhone: phone,
       senderName: msg.pushName || 'وزارة الصحة',
       status: 'OPEN',
@@ -323,14 +326,14 @@ async function processMOHMessagePipeline(msg, sock) {
     };
     complaints.push(newComplaint);
     saveComplaintsCache(complaints);
-    logEvent(`🚨 Gemini opened new complaint ${complaintId} for +${phone}`, 'info');
+    logEvent(`🚨 Gemini opened new complaint ${finalTicketId} for +${phone}`, 'info');
 
     if (!fromMe) {
       await sendAdminAlertWithCounter(sock, phone, newComplaint.name, 1, text, true);
     }
   } 
-  else if (decision.action === 'ROUTE_TO_COMPLAINT' && decision.matchedComplaintId) {
-    const target = complaints.find(c => c.complaintId === decision.matchedComplaintId);
+  else if ((action === 'INCREMENT' || action === 'ROUTE_TO_COMPLAINT') && targetId) {
+    const target = complaints.find(c => c.complaintId === targetId || c.ticketId === targetId);
     if (target) {
       target.messages.push({
         timestamp: new Date().toISOString(),
@@ -348,15 +351,15 @@ async function processMOHMessagePipeline(msg, sock) {
       if (decision.draftReply) target.draftReply = decision.draftReply;
 
       saveComplaintsCache(complaints);
-      logEvent(`📥 Gemini routed message to complaint ${target.complaintId} (Count: ${target.messageCount})`, 'info');
+      logEvent(`📥 Gemini routed message to complaint ${target.complaintId || target.ticketId} (Count: ${target.messageCount})`, 'info');
 
       if (!fromMe) {
         await sendAdminAlertWithCounter(sock, phone, target.name, target.messageCount, text, true);
       }
     }
   } 
-  else if (decision.action === 'CLOSE_COMPLAINT' && decision.matchedComplaintId) {
-    const target = complaints.find(c => c.complaintId === decision.matchedComplaintId);
+  else if ((action === 'CLOSE' || action === 'CLOSE_COMPLAINT') && targetId) {
+    const target = complaints.find(c => c.complaintId === targetId || c.ticketId === targetId);
     if (target) {
       target.status = 'CLOSED';
       target.closeDate = new Date().toISOString();
@@ -367,11 +370,11 @@ async function processMOHMessagePipeline(msg, sock) {
         hasAttachment: hasAtt
       });
       saveComplaintsCache(complaints);
-      logEvent(`✅ Gemini closed complaint ${target.complaintId} based on message interaction.`, 'info');
+      logEvent(`✅ Gemini closed complaint ${target.complaintId || target.ticketId} based on message interaction.`, 'info');
     }
   } 
   else {
-    // NO_ACTION (e.g. general greeting or ignore text when closed)
+    // IGNORE / NO_ACTION
     if (!fromMe) {
       // Forward general message to admin WITHOUT counter
       await sendAdminAlertWithCounter(sock, phone, msg.pushName || 'وزارة الصحة', null, text, false);
