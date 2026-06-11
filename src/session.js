@@ -50,33 +50,16 @@ function restoreSession() {
  */
 function encodeSession() {
   try {
-    if (!fs.existsSync(AUTH_DIR)) {
-      console.warn('⚠️  Auth directory not found.');
+    const credsPath = path.join(AUTH_DIR, 'creds.json');
+    if (!fs.existsSync(credsPath)) {
+      console.warn('⚠️  creds.json not found in auth directory.');
       return null;
     }
     
-    const files = fs.readdirSync(AUTH_DIR);
-    const bundle = {};
+    const content = fs.readFileSync(credsPath, 'utf8');
+    const json = JSON.parse(content);
     
-    for (const file of files) {
-      const filePath = path.join(AUTH_DIR, file);
-      const stat = fs.statSync(filePath);
-      if (stat.isFile()) {
-        const content = fs.readFileSync(filePath, 'utf8');
-        try {
-          bundle[file] = JSON.parse(content);
-        } catch (_) {
-          bundle[file] = content;
-        }
-      }
-    }
-    
-    if (Object.keys(bundle).length === 0) {
-      console.warn('⚠️  No session files found in auth directory.');
-      return null;
-    }
-    
-    const jsonStr = JSON.stringify(bundle);
+    const jsonStr = JSON.stringify(json);
     const compressed = zlib.deflateSync(jsonStr);
     return compressed.toString('base64');
   } catch (e) {

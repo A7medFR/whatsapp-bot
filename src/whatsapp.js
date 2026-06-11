@@ -19,6 +19,7 @@ const qrcode = require('qrcode-terminal');
 const fs     = require('fs');
 const path   = require('path');
 const { restoreSession } = require('./session');
+const geminiService = require('./geminiService');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 function cleanAndNormalizePhone(phone) {
@@ -167,93 +168,17 @@ function getComplaintsStore() {
   return complaintsStore;
 }
 
-function closeComplaint(ticketId) {
+function closeComplaint(complaintId) {
   const complaints = loadComplaintsCache();
-  const ticket = complaints.find(t => t.ticketId === ticketId);
-  if (ticket) {
-    ticket.status = 'CLOSED';
-    ticket.closeDate = new Date().toISOString();
+  const complaint = complaints.find(c => c.complaintId === complaintId);
+  if (complaint) {
+    complaint.status = 'CLOSED';
+    complaint.closeDate = new Date().toISOString();
     saveComplaintsCache(complaints);
-    logEvent(`✅ Complaint ${ticketId} resolved via Web UI Dashboard.`, 'info');
+    logEvent(`✅ Complaint ${complaintId} resolved via Web UI Dashboard.`, 'info');
     return true;
   }
   return false;
-}
-
-function promoteTempTicket(tempId, officialId) {
-  const complaints = loadComplaintsCache();
-  const ticket = complaints.find(t => t.ticketId === tempId);
-  if (ticket) {
-    const formattedId = officialId.startsWith('MOH-') ? officialId : `MOH-${officialId}`;
-    const exists = complaints.some(t => t.ticketId === formattedId);
-    if (exists) {
-      throw new Error(`Ticket ID ${formattedId} is already in use.`);
-    }
-    ticket.ticketId = formattedId;
-    ticket.isTemporary = false;
-    ticket.requiresManualBinding = false;
-    saveComplaintsCache(complaints);
-    logEvent(`🔄 Promoted temporary ticket ${tempId} to official ID ${formattedId}`, 'info');
-    return ticket;
-  }
-  return null;
-}
-
-function approveAttachment(ticketId) {
-  const complaints = loadComplaintsCache();
-  const ticket = complaints.find(t => t.ticketId === ticketId);
-  if (ticket && ticket.status === 'PENDING_REVIEW') {
-    ticket.status = 'CLOSED';
-    ticket.closeDate = new Date().toISOString();
-    saveComplaintsCache(complaints);
-    logEvent(`✅ Approved closure attachment for ticket ${ticketId}. Ticket is now CLOSED.`, 'info');
-    return true;
-  }
-  return false;
-}
-
-function rejectAttachment(ticketId) {
-  const complaints = loadComplaintsCache();
-  const ticket = complaints.find(t => t.ticketId === ticketId);
-  if (ticket && ticket.status === 'PENDING_REVIEW') {
-    ticket.status = 'OPEN';
-    ticket.messages.push({
-      timestamp: new Date().toISOString(),
-      text: "[Admin Warning: Outbound Attachment Validation Rejected - Marked as General File Share]",
-      fromMe: true,
-      hasAttachment: false
-    });
-    saveComplaintsCache(complaints);
-    logEvent(`❌ Rejected closure attachment for ticket ${ticketId}. Ticket returned to OPEN state.`, 'warn');
-    return true;
-  }
-  return false;
-}
-
-function bindMessageToTicket(ticketId, messageTimestamp, targetTicketId) {
-  const complaints = loadComplaintsCache();
-  const sourceTicket = complaints.find(t => t.ticketId === ticketId);
-  const targetTicket = complaints.find(t => t.ticketId === targetTicketId);
-  if (!sourceTicket || !targetTicket) return false;
-
-  const msgIndex = sourceTicket.messages.findIndex(m => m.timestamp === messageTimestamp);
-  if (msgIndex === -1) return false;
-
-  const [msg] = sourceTicket.messages.splice(msgIndex, 1);
-  msg.text = msg.text.replace('[⚠️ AMBIGUOUS CONTEXTUAL MATCH] ', '');
-  
-  targetTicket.messages.push(msg);
-  targetTicket.messageCount = targetTicket.messages.filter(m => !m.fromMe).length;
-  sourceTicket.messageCount = sourceTicket.messages.filter(m => !m.fromMe).length;
-
-  const remainingAmbiguous = sourceTicket.messages.some(m => m.text.includes('AMBIGUOUS CONTEXTUAL MATCH'));
-  if (!remainingAmbiguous) {
-    sourceTicket.requiresManualBinding = false;
-  }
-
-  saveComplaintsCache(complaints);
-  logEvent(`🔗 Message bound manually from ticket ${ticketId} to target ticket ${targetTicketId}.`, 'info');
-  return true;
 }
 
 function hasAttachment(msg) {
@@ -301,22 +226,6 @@ function getMessageText(msg) {
   return text;
 }
 
-const ticketRegex = /(?:بلاغ\s*رقم\s*|شكوى\s*رقم\s*|رقم\s*البلاغ\s*|رقم\s*الشكوى\s*)(\d+)/i;
-
-function extractTicketId(text) {
-  if (!text) return null;
-  const match = text.match(ticketRegex);
-  return match ? `MOH-${match[1]}` : null;
-}
-
-function generateTempId(phone) {
-  return `TEMP-${phone}-${Math.floor(Date.now() / 1000)}`;
-}
-
-function appendGeneralInteractionLog(phone, text) {
-  console.log(`ℹ️ [General Chat] MOH Contact +${phone}: ${text}`);
-}
-
 async function triggerAdminAlert(sock, text) {
   if (FORWARD_NUMBERS.length === 0) {
     logEvent(`⚠️ Alert forwarding aborted: FORWARD_NUMBERS is empty in .env.`, 'warn');
@@ -333,38 +242,16 @@ async function triggerAdminAlert(sock, text) {
   }
 }
 
-async function executeTicketClosure(complaints, commandTarget, phone, remoteJid, sock) {
-  let closedTicket = null;
-  if (commandTarget) {
-    closedTicket = complaints.find(t => t.ticketId === commandTarget && t.status !== 'CLOSED');
-    if (!closedTicket) {
-      const clean = commandTarget.replace(/\D/g, '');
-      if (clean) {
-        closedTicket = complaints.find(t => 
-          (t.ticketId.includes(clean) || t.senderPhone === clean) && t.status !== 'CLOSED'
-        );
-      }
-    }
-  } else {
-    const active = complaints.filter(t => t.senderPhone === phone && t.status === 'OPEN');
-    if (active.length === 1) {
-      closedTicket = active[0];
-    }
+async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shouldIncludeCounter = true) {
+  let alertText = `🚨 رسالة جديدة واردة من وزارة الصحة\n` +
+                  `📱 الرقم: +${phone}\n` +
+                  `👤 الاسم: ${name}\n`;
+  if (shouldIncludeCounter && counter !== null) {
+    alertText += `📊 عدد الرسائل: ${counter}\n`;
   }
-
-  if (closedTicket) {
-    closedTicket.status = 'CLOSED';
-    closedTicket.closeDate = new Date().toISOString();
-    saveComplaintsCache(complaints);
-    logEvent(`✅ Closed complaint ${closedTicket.ticketId} via manual command.`, 'info');
-    try {
-      await sock.sendMessage(remoteJid, { text: `✅ [نظام] تم إغلاق بطاقة الشكوى ${closedTicket.ticketId} بنجاح.` });
-    } catch (_) {}
-  } else {
-    try {
-      await sock.sendMessage(remoteJid, { text: `❌ لم يتم العثور على شكوى نشطة بالرقم/الهاتف المحدد لإغلاقها.` });
-    } catch (_) {}
-  }
+  alertText += `💬 الرسالة: ${text || '[ملف مرفق]'}`;
+  
+  await triggerAdminAlert(sock, alertText);
 }
 
 async function processMOHMessagePipeline(msg, sock) {
@@ -378,106 +265,95 @@ async function processMOHMessagePipeline(msg, sock) {
   const hasAtt = hasAttachment(msg);
 
   let complaints = loadComplaintsCache();
+  const existingForPhone = complaints.filter(c => c.phone === phone);
 
-  // ----------------------------------------------------
-  // PIPELINE OUTBOUND: CLINIC RESPONDING TO CHAT
-  // ----------------------------------------------------
-  if (fromMe) {
-    if (text.startsWith('/close') || text.startsWith('/اغلاق')) {
-      const commandTarget = text.split(' ')[1];
-      await executeTicketClosure(complaints, commandTarget, phone, remoteJid, sock);
-      return;
-    }
+  // Invoke Gemini service to make the decision
+  const decision = await geminiService.processMessageEvent({
+    phone,
+    messageText: text,
+    hasAttachment: hasAtt,
+    isOutbound: fromMe,
+    existingComplaints: existingForPhone
+  });
 
-    if (hasAtt) {
-      const openTickets = complaints.filter(t => t.senderPhone === phone && t.status === 'OPEN');
-      if (openTickets.length === 1) {
-        openTickets[0].status = "PENDING_REVIEW";
-        openTickets[0].messages.push({
-          timestamp: new Date().toISOString(),
-          text: "[Clinic Outbound Attachment Pushed - Under Validation]",
-          fromMe: true,
-          hasAttachment: true
-        });
-        saveComplaintsCache(complaints);
-        await sock.sendMessage(remoteJid, { 
-          text: `⚠️ تم استلام الملف المرفق. تم تحويل بطاقة الشكوى ${openTickets[0].ticketId} إلى مرحلة المراجعة للتأكد من مطابقة شروط الإغلاق المعتمدة.` 
-        });
-      }
-    }
-    return;
-  }
-
-  // ----------------------------------------------------
-  // PIPELINE INBOUND: MINISTERIAL AGENT RAW TRAFFIC
-  // ----------------------------------------------------
-  const explicitTicketId = extractTicketId(text);
-  const activeTickets = complaints.filter(t => t.senderPhone === phone && t.status === 'OPEN');
-
-  if (explicitTicketId) {
-    let ticket = complaints.find(t => t.ticketId === explicitTicketId);
-
-    if (!ticket || ticket.status === 'CLOSED') {
-      ticket = {
-        ticketId: explicitTicketId,
-        senderPhone: phone,
-        senderName: msg.pushName || "وزارة الصحة",
-        status: "OPEN",
-        isTemporary: false,
-        requiresManualBinding: false,
-        openDate: new Date().toISOString(),
-        closeDate: null,
-        messageCount: 1,
-        messages: [{ timestamp: new Date().toISOString(), text, fromMe: false, hasAttachment: hasAtt }]
-      };
-      complaints.push(ticket);
-      await triggerAdminAlert(sock, `🚨 بلاغ رسمي جديد وارد من وزارة الصحة رقم: ${explicitTicketId}`);
-    } else {
-      ticket.messageCount += 1;
-      ticket.messages.push({ timestamp: new Date().toISOString(), text, fromMe: false, hasAttachment: hasAtt });
-      await triggerAdminAlert(sock, `💬 الرسالة رقم ${ticket.messageCount} لبطاقة البلاغ النشطة رقم ${ticket.ticketId}`);
-    }
-  } else {
-    if (activeTickets.length === 1) {
-      activeTickets[0].messageCount += 1;
-      activeTickets[0].messages.push({ timestamp: new Date().toISOString(), text, fromMe: false, hasAttachment: hasAtt });
-      await triggerAdminAlert(sock, `💬 رسالة الحاقية: الرسالة رقم ${activeTickets[0].messageCount} لبطاقة البلاغ رقم ${activeTickets[0].ticketId}`);
-    } else if (activeTickets.length > 1) {
-      const chronologicalTarget = activeTickets.sort((a, b) => new Date(b.openDate) - new Date(a.openDate))[0];
-      chronologicalTarget.messageCount += 1;
-      chronologicalTarget.requiresManualBinding = true;
-      chronologicalTarget.messages.push({
+  if (decision.action === 'OPEN_COMPLAINT') {
+    const complaintId = `complaint_${phone}_${Math.floor(Date.now() / 1000)}`;
+    const newComplaint = {
+      complaintId,
+      phone,
+      name: msg.pushName || 'وزارة الصحة',
+      status: 'OPEN',
+      summary: decision.summary || 'شكوى جديدة',
+      category: decision.category || 'أخرى',
+      draftReply: decision.draftReply || '',
+      openDate: new Date().toISOString(),
+      closeDate: null,
+      messageCount: 1,
+      messages: [{
         timestamp: new Date().toISOString(),
-        text: `[⚠️ AMBIGUOUS CONTEXTUAL MATCH] ${text}`,
+        text: text || '[ملف مرفق]',
         fromMe: false,
         hasAttachment: hasAtt
+      }]
+    };
+    complaints.push(newComplaint);
+    saveComplaintsCache(complaints);
+    logEvent(`🚨 Gemini opened new complaint ${complaintId} for +${phone}`, 'info');
+
+    if (!fromMe) {
+      await sendAdminAlertWithCounter(sock, phone, newComplaint.name, 1, text, true);
+    }
+  } 
+  else if (decision.action === 'ROUTE_TO_COMPLAINT' && decision.matchedComplaintId) {
+    const target = complaints.find(c => c.complaintId === decision.matchedComplaintId);
+    if (target) {
+      target.messages.push({
+        timestamp: new Date().toISOString(),
+        text: text || '[ملف مرفق]',
+        fromMe,
+        hasAttachment: hasAtt
       });
-      await triggerAdminAlert(sock, `⚠️ تنبيه: رسالة مبهمة واردة في محادثة تحتوي على أكثر من بلاغ نشط. تم تعليمها للمراجعة اليدوية.`);
-    } else {
-      if (hasAtt) {
-        const tempId = generateTempId(phone);
-        const newTempTicket = {
-          ticketId: tempId,
-          senderPhone: phone,
-          senderName: msg.pushName || "وزارة الصحة",
-          status: "OPEN",
-          isTemporary: true,
-          requiresManualBinding: false,
-          openDate: new Date().toISOString(),
-          closeDate: null,
-          messageCount: 1,
-          messages: [{ timestamp: new Date().toISOString(), text, fromMe: false, hasAttachment: hasAtt }]
-        };
-        complaints.push(newTempTicket);
-        await triggerAdminAlert(sock, `⚠️ تم فتح ملف بلاغ مؤقت رقم ${tempId} نظراً لاستلام ملف مرفق مستقل بدون رقم مرجعي.`);
-      } else {
-        appendGeneralInteractionLog(phone, text);
+
+      if (!fromMe) {
+        target.messageCount += 1;
+      }
+      
+      if (decision.summary) target.summary = decision.summary;
+      if (decision.category) target.category = decision.category;
+      if (decision.draftReply) target.draftReply = decision.draftReply;
+
+      saveComplaintsCache(complaints);
+      logEvent(`📥 Gemini routed message to complaint ${target.complaintId} (Count: ${target.messageCount})`, 'info');
+
+      if (!fromMe) {
+        await sendAdminAlertWithCounter(sock, phone, target.name, target.messageCount, text, true);
       }
     }
+  } 
+  else if (decision.action === 'CLOSE_COMPLAINT' && decision.matchedComplaintId) {
+    const target = complaints.find(c => c.complaintId === decision.matchedComplaintId);
+    if (target) {
+      target.status = 'CLOSED';
+      target.closeDate = new Date().toISOString();
+      target.messages.push({
+        timestamp: new Date().toISOString(),
+        text: text || (fromMe ? '[ملف مرفق مرسل من العيادة - تم إغلاق الشكوى]' : '[تم إغلاق الشكوى من قبل وزارة الصحة]'),
+        fromMe,
+        hasAttachment: hasAtt
+      });
+      saveComplaintsCache(complaints);
+      logEvent(`✅ Gemini closed complaint ${target.complaintId} based on message interaction.`, 'info');
+    }
+  } 
+  else {
+    // NO_ACTION (e.g. general greeting or ignore text when closed)
+    if (!fromMe) {
+      // Forward general message to admin WITHOUT counter
+      await sendAdminAlertWithCounter(sock, phone, msg.pushName || 'وزارة الصحة', null, text, false);
+    }
   }
-
-  saveComplaintsCache(complaints);
 }
+
 
 // ─── Label helpers ────────────────────────────────────────────────────────────
 function findLabelId(labelName) {
@@ -930,4 +806,4 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTempTicket, approveAttachment, rejectAttachment, bindMessageToTicket };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint };

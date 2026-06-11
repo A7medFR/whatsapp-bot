@@ -811,73 +811,7 @@ app.post('/api/complaints/:id/close', (req, res) => {
   }
 });
 
-/**
- * POST /api/complaints/:id/promote
- * Promotes a temporary ticket to an official MOH ticket ID.
- */
-app.post('/api/complaints/:id/promote', (req, res) => {
-  const { id } = req.params;
-  const { officialId } = req.body;
-  if (!officialId) {
-    return res.status(400).json({ error: 'Missing officialId in request body.' });
-  }
-  try {
-    const ticket = wa.promoteTempTicket(id, officialId);
-    if (ticket) {
-      res.json({ success: true, message: `Temporary ticket ${id} promoted to ${ticket.ticketId}.`, ticket });
-    } else {
-      res.status(404).json({ error: `Temporary ticket with ID ${id} not found.` });
-    }
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
 
-/**
- * POST /api/complaints/:id/approve-attachment
- * Approves a closure attachment pending review, closing the ticket.
- */
-app.post('/api/complaints/:id/approve-attachment', (req, res) => {
-  const { id } = req.params;
-  const success = wa.approveAttachment(id);
-  if (success) {
-    res.json({ success: true, message: `Closure attachment for ticket ${id} approved. Ticket is CLOSED.` });
-  } else {
-    res.status(404).json({ error: `Ticket with ID ${id} is not in PENDING_REVIEW status.` });
-  }
-});
-
-/**
- * POST /api/complaints/:id/reject-attachment
- * Rejects a closure attachment pending review, returning it to OPEN status.
- */
-app.post('/api/complaints/:id/reject-attachment', (req, res) => {
-  const { id } = req.params;
-  const success = wa.rejectAttachment(id);
-  if (success) {
-    res.json({ success: true, message: `Closure attachment for ticket ${id} rejected. Ticket returned to OPEN.` });
-  } else {
-    res.status(404).json({ error: `Ticket with ID ${id} is not in PENDING_REVIEW status.` });
-  }
-});
-
-/**
- * POST /api/complaints/:id/bind-message
- * Binds an ambiguous message from a ticket to a target ticket.
- */
-app.post('/api/complaints/:id/bind-message', (req, res) => {
-  const { id } = req.params;
-  const { timestamp, targetTicketId } = req.body;
-  if (!timestamp || !targetTicketId) {
-    return res.status(400).json({ error: 'Missing timestamp or targetTicketId in request body.' });
-  }
-  const success = wa.bindMessageToTicket(id, timestamp, targetTicketId);
-  if (success) {
-    res.json({ success: true, message: `Message successfully bound to ticket ${targetTicketId}.` });
-  } else {
-    res.status(404).json({ error: `Failed to bind message. Verify ticket IDs and message timestamp.` });
-  }
-});
 
 /**
  * POST /send-file

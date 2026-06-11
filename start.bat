@@ -8,30 +8,26 @@ echo    Clinic WhatsApp Offer Bot - Starting
 echo  ==========================================
 echo.
 
-:: Try to run node directly (skip "where" check which can fail on some setups)
-node --version >nul 2>nul
+:: Check if node is in PATH using where
+where node >nul 2>nul
 if %errorlevel% neq 0 (
     :: Try common Node.js install paths manually
-    set "NODE_PATH=C:\Program Files\nodejs\node.exe"
-    if exist "%NODE_PATH%" (
+    if exist "C:\Program Files\nodejs\node.exe" (
         set "PATH=%PATH%;C:\Program Files\nodejs"
+    ) else if exist "C:\Program Files (x86)\nodejs\node.exe" (
+        set "PATH=%PATH%;C:\Program Files (x86)\nodejs"
     ) else (
-        set "NODE_PATH=C:\Program Files (x86)\nodejs\node.exe"
-        if exist "%NODE_PATH%" (
-            set "PATH=%PATH%;C:\Program Files (x86)\nodejs"
-        ) else (
-            color 0C
-            echo  [ERROR] Cannot find Node.js.
-            echo  Please open "Node.js command prompt" from the Start Menu
-            echo  and run this command instead:
-            echo.
-            echo     cd /d "c:\Users\CS\Downloads\whatsapp-price-bot"
-            echo     npm install
-            echo     node src/server.js
-            echo.
-            pause
-            exit /b 1
-        )
+        color 0C
+        echo ===================================================
+        echo  [ERROR] Node.js is not installed on this computer!
+        echo ===================================================
+        echo  Please download and install Node.js (LTS version) from:
+        echo  https://nodejs.org/
+        echo.
+        echo  Once installed, close this window and open start.bat again.
+        echo ===================================================
+        pause
+        exit /b 1
     )
 )
 
@@ -49,7 +45,7 @@ if not exist "node_modules" (
         echo.
         echo  [ERROR] npm install failed.
         echo  Try opening "Node.js command prompt" from the Start Menu and running:
-        echo     cd /d "c:\Users\CS\Downloads\whatsapp-price-bot"
+        echo     cd /d "c:\Users\HP\.gemini\antigravity-ide\scratch\whatsapp-bot"
         echo     npm install
         echo.
         pause
@@ -58,7 +54,7 @@ if not exist "node_modules" (
     echo.
 )
 
-echo  [2/2] Starting bot on http://localhost:3001
+echo  [2/2] Starting bot on http://localhost:8005
 echo.
 echo  ==========================================
 echo   Keep this window open while using the app

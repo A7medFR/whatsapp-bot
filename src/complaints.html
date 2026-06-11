@@ -693,11 +693,12 @@
       <table id="complaints-table">
         <thead>
           <tr>
-            <th>Ticket Identifier</th>
             <th>MOH Sender Info</th>
-            <th>Messages Received</th>
+            <th>AI Category</th>
+            <th>AI Summary</th>
+            <th>Messages Count</th>
             <th>Opened Date</th>
-            <th>Duration Open</th>
+            <th>Duration</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -720,12 +721,24 @@
         <button class="close-btn" onclick="closeModal()" id="btn-close-modal">×</button>
       </div>
 
-      <!-- Promotion form inside modal for Temp tickets -->
-      <div id="modal-promotion-container" class="promotion-card" style="display: none;">
-        <span class="promotion-title">🔑 Promote to Official Ticket:</span>
-        <div class="promotion-form">
-          <input type="text" id="modal-promotion-input" class="promotion-input" placeholder="Enter Official MOH Complaint ID..." />
-          <button class="btn btn-accent" onclick="promoteActiveTicketFromModal()" style="padding: 6px 12px; font-size: 0.8rem;">Promote</button>
+      <!-- AI Insights Panel -->
+      <div id="modal-ai-insights" style="background: rgba(16, 185, 129, 0.04); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 12px; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">AI Category:</span>
+            <span id="modal-ai-category" style="font-weight: bold; color: var(--accent-green); margin-left: 10px; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 6px;">-</span>
+          </div>
+        </div>
+        <div>
+          <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">AI Summary:</span>
+          <p id="modal-ai-summary" style="margin-top: 4px; font-size: 0.9rem; color: var(--text-main); line-height: 1.45;">-</p>
+        </div>
+        <div id="modal-ai-draft-container" style="position: relative; display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Suggested Response Draft (Arabic):</span>
+          <div style="display: flex; gap: 8px; align-items: stretch; margin-top: 4px;">
+            <div id="modal-ai-draft-text" style="flex: 1; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; font-size: 0.9rem; font-family: sans-serif; line-height: 1.4; color: var(--text-main); white-space: pre-wrap; min-height: 50px;">-</div>
+            <button class="btn btn-accent" onclick="copyAIDraft()" style="padding: 10px 15px; font-size: 0.85rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 4px;">📋 Copy</button>
+          </div>
         </div>
       </div>
 
@@ -734,14 +747,9 @@
       </div>
       
       <div style="display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 10px; flex-wrap: wrap;">
-        <div id="modal-review-actions" style="display: flex; gap: 8px;">
-          <!-- Shown for PENDING_REVIEW tickets -->
-          <button class="btn btn-success" onclick="approveReviewFromModal()">Approve Resolution</button>
-          <button class="btn btn-danger" onclick="rejectReviewFromModal()">Reject Closure File</button>
-        </div>
         <div style="display: flex; gap: 8px; margin-left: auto;">
           <button id="modal-close-ticket-btn" class="btn btn-danger" onclick="closeTicketFromModal()">
-            Manual Resolve
+            Resolve Complaint
           </button>
           <button class="btn" onclick="closeModal()">Close Window</button>
         </div>
@@ -820,30 +828,32 @@
 
       const filtered = complaintsData.filter(c => {
         if (statusFilter === 'open' && c.status !== 'OPEN') return false;
-        if (statusFilter === 'pending' && c.status !== 'PENDING_REVIEW') return false;
         if (statusFilter === 'closed' && c.status !== 'CLOSED') return false;
+        // In the simplified model, we don't have PENDING_REVIEW state, but we can map it to open if it happens
+        if (statusFilter === 'pending' && c.status !== 'PENDING_REVIEW') return false;
 
         if (!search) return true;
-        const sender = (c.senderPhone || '').toLowerCase();
-        const name = (c.senderName || '').toLowerCase();
-        const ticketId = (c.ticketId || '').toLowerCase();
+        const sender = (c.phone || '').toLowerCase();
+        const name = (c.name || '').toLowerCase();
+        const cat = (c.category || '').toLowerCase();
+        const sum = (c.summary || '').toLowerCase();
 
-        return sender.includes(search) || name.includes(search) || ticketId.includes(search);
+        return sender.includes(search) || name.includes(search) || cat.includes(search) || sum.includes(search);
       });
 
-      // Sort: PENDING_REVIEW first, then OPEN, then CLOSED. Newest dates first within states.
+      // Sort: Open first, then Closed. Newest dates first.
       filtered.sort((a, b) => {
-        const stateWeight = { 'PENDING_REVIEW': 1, 'OPEN': 2, 'CLOSED': 3 };
-        if (stateWeight[a.status] !== stateWeight[b.status]) {
-          return stateWeight[a.status] - stateWeight[b.status];
-        }
+        const stateWeight = { 'OPEN': 1, 'PENDING_REVIEW': 2, 'CLOSED': 3 };
+        const wA = stateWeight[a.status] || 9;
+        const wB = stateWeight[b.status] || 9;
+        if (wA !== wB) return wA - wB;
         return new Date(b.openDate) - new Date(a.openDate);
       });
 
       if (filtered.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="7" class="empty-state">
+            <td colspan="8" class="empty-state">
               <div class="empty-state-icon">📂</div>
               <p>No complaints matching search or filters found.</p>
             </td>
@@ -854,50 +864,28 @@
 
       filtered.forEach(c => {
         const tr = document.createElement('tr');
-        if (c.requiresManualBinding) {
-          tr.className = 'collision-row';
-        }
-        
-        let ticketLabel = c.isTemporary 
-          ? `<span style="color: var(--accent-yellow); font-style: italic;">Temp Hash</span>` 
-          : `<b>${c.ticketId}</b>`;
-        
-        if (c.requiresManualBinding) {
-          ticketLabel += `<br><span class="collision-badge">⚠️ Ambiguity Warning</span>`;
-        }
-
         const openTime = new Date(c.openDate).toLocaleString();
         
         let statusBadge = '';
         if (c.status === 'OPEN') {
           statusBadge = `<span class="badge-status badge-open">● Open</span>`;
-        } else if (c.status === 'PENDING_REVIEW') {
-          statusBadge = `<span class="badge-status badge-pending">⏳ Pending Review</span>`;
         } else {
           statusBadge = `<span class="badge-status badge-closed">✓ Closed</span>`;
         }
 
-        let actionsHtml = `<button class="btn btn-accent" onclick="openComplaintLogs('${c.ticketId}')" style="padding: 5px 10px; font-size: 0.78rem;">💬 Audit Log</button>`;
+        let actionsHtml = `<button class="btn btn-accent" onclick="openComplaintLogs('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem;">💬 Audit Log</button>`;
         
-        if (c.isTemporary) {
-          actionsHtml += `<button class="btn btn-warning" onclick="promptPromotion('${c.ticketId}')" style="padding: 5px 10px; font-size: 0.78rem;">🔑 Promote</button>`;
-        }
-        
-        if (c.status === 'PENDING_REVIEW') {
-          actionsHtml += `
-            <button class="btn btn-success" onclick="approveReview('${c.ticketId}')" style="padding: 5px 10px; font-size: 0.78rem;">Approve</button>
-            <button class="btn btn-danger" onclick="rejectReview('${c.ticketId}')" style="padding: 5px 10px; font-size: 0.78rem;">Reject</button>
-          `;
-        } else if (c.status === 'OPEN') {
-          actionsHtml += `<button class="btn btn-danger" onclick="closeComplaintTicket('${c.ticketId}')" style="padding: 5px 10px; font-size: 0.78rem;">Resolve</button>`;
+        if (c.status === 'OPEN') {
+          actionsHtml += `<button class="btn btn-danger" onclick="closeComplaintTicket('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem;">Resolve</button>`;
         }
 
         tr.innerHTML = `
-          <td>${ticketLabel}</td>
           <td>
-            <div style="font-weight: 600;">${c.senderName}</div>
-            <div><a href="https://wa.me/${c.senderPhone}" target="_blank" class="phone-link">+${c.senderPhone}</a></div>
+            <div style="font-weight: 600;">${c.name}</div>
+            <div><a href="https://wa.me/${c.phone}" target="_blank" class="phone-link">+${c.phone}</a></div>
           </td>
+          <td style="font-weight: bold; color: var(--accent-green);">${c.category || 'أخرى'}</td>
+          <td style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${c.summary || ''}">${c.summary || '-'}</td>
           <td style="font-weight: 700; text-align: center;">${c.messageCount}</td>
           <td>${openTime}</td>
           <td>${formatDuration(c.openDate, c.closeDate)}</td>
@@ -910,10 +898,10 @@
       });
     }
 
-    async function closeComplaintTicket(ticketId) {
-      if (!confirm(`Are you sure you want to mark ticket ${ticketId} as resolved?`)) return;
+    async function closeComplaintTicket(complaintId) {
+      if (!confirm(`Are you sure you want to mark this complaint as resolved?`)) return;
       try {
-        const response = await fetch(`/api/complaints/${ticketId}/close`, { method: 'POST' });
+        const response = await fetch(`/api/complaints/${complaintId}/close`, { method: 'POST' });
         if (response.ok) {
           showToast('✅ Complaint marked as resolved.');
           fetchComplaints();
@@ -925,89 +913,32 @@
       }
     }
 
-    async function promptPromotion(tempId) {
-      const officialId = prompt(`Enter the official MOH Complaint Ticket ID for temporary ticket:\n${tempId}`);
-      if (!officialId) return;
+    function openComplaintLogs(complaintId, isSilentRefresh = false) {
+      const complaint = complaintsData.find(c => c.complaintId === complaintId);
+      if (!complaint) return;
 
-      try {
-        const response = await fetch(`/api/complaints/${tempId}/promote`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ officialId })
-        });
-        const resData = await response.json();
-        if (response.ok) {
-          showToast(`✅ Successfully promoted to ${resData.ticket.ticketId}`);
-          fetchComplaints();
-        } else {
-          showToast(`❌ Promotion failed: ${resData.error}`);
-        }
-      } catch (err) {
-        showToast('❌ Connection error promoting ticket.');
-      }
-    }
-
-    async function approveReview(ticketId) {
-      if (!confirm(`Confirm that this clinic attachment resolves complaint ${ticketId} and close ticket?`)) return;
-      try {
-        const response = await fetch(`/api/complaints/${ticketId}/approve-attachment`, { method: 'POST' });
-        if (response.ok) {
-          showToast('✅ Resolution approved. Ticket CLOSED.');
-          fetchComplaints();
-        } else {
-          showToast('❌ Action failed.');
-        }
-      } catch (err) {
-        showToast('❌ Connection error.');
-      }
-    }
-
-    async function rejectReview(ticketId) {
-      if (!confirm(`Reject this closure attachment? Ticket ${ticketId} will return to OPEN state.`)) return;
-      try {
-        const response = await fetch(`/api/complaints/${ticketId}/reject-attachment`, { method: 'POST' });
-        if (response.ok) {
-          showToast('❌ Resolution rejected. Ticket returned to OPEN.');
-          fetchComplaints();
-        } else {
-          showToast('❌ Action failed.');
-        }
-      } catch (err) {
-        showToast('❌ Connection error.');
-      }
-    }
-
-    function openComplaintLogs(ticketId, isSilentRefresh = false) {
-      const ticket = complaintsData.find(c => c.ticketId === ticketId);
-      if (!ticket) return;
-
-      activeDetailTicket = ticket;
-      document.getElementById('modal-ticket-id').innerHTML = ticket.isTemporary
-        ? `Temporary Hash Ticket`
-        : `Complaint Ticket #${ticket.ticketId}`;
+      activeDetailTicket = complaint;
+      document.getElementById('modal-ticket-id').innerHTML = `MOH Complaint Tracker`;
+      document.getElementById('modal-sender-info').innerHTML = `Sender: <b>${complaint.name}</b> (+${complaint.phone}) | Status: <b>${complaint.status}</b>`;
       
-      document.getElementById('modal-sender-info').innerHTML = `Sender: <b>${ticket.senderName}</b> (+${ticket.senderPhone}) | Status: <b>${ticket.status}</b>`;
+      // Populate AI Insights
+      document.getElementById('modal-ai-category').textContent = complaint.category || 'أخرى';
+      document.getElementById('modal-ai-summary').textContent = complaint.summary || 'لم يتم توليد ملخص بعد.';
       
-      // Promotion Portal inside modal
-      const modalPromotionCard = document.getElementById('modal-promotion-container');
-      if (ticket.isTemporary) {
-        modalPromotionCard.style.display = 'flex';
-        document.getElementById('modal-promotion-input').value = '';
+      const draftTextEl = document.getElementById('modal-ai-draft-text');
+      const draftContainerEl = document.getElementById('modal-ai-draft-container');
+      
+      if (complaint.draftReply) {
+        draftTextEl.textContent = complaint.draftReply;
+        draftContainerEl.style.display = 'flex';
       } else {
-        modalPromotionCard.style.display = 'none';
-      }
-
-      // Review Actions Visibility
-      const reviewRow = document.getElementById('modal-review-actions');
-      if (ticket.status === 'PENDING_REVIEW') {
-        reviewRow.style.display = 'flex';
-      } else {
-        reviewRow.style.display = 'none';
+        draftTextEl.textContent = '-';
+        draftContainerEl.style.display = 'none';
       }
 
       // Resolve button status
       const manualResolveBtn = document.getElementById('modal-close-ticket-btn');
-      if (ticket.status === 'CLOSED' || ticket.status === 'PENDING_REVIEW') {
+      if (complaint.status === 'CLOSED') {
         manualResolveBtn.style.display = 'none';
       } else {
         manualResolveBtn.style.display = 'block';
@@ -1017,7 +948,7 @@
       const timeline = document.getElementById('modal-timeline');
       timeline.innerHTML = '';
 
-      const messages = ticket.messages || [];
+      const messages = complaint.messages || [];
       if (messages.length === 0) {
         timeline.innerHTML = '<div class="empty-state">No messages logged.</div>';
       } else {
@@ -1033,36 +964,13 @@
             attachmentBadge = `<span class="bubble-attachment-badge">📎 Attachment File</span>`;
           }
 
-          const isAmbiguous = msg.text.includes('AMBIGUOUS CONTEXTUAL MATCH');
-          let textDisplay = msg.text;
-
-          // Manual binding dropdown if message has ambiguity collision
-          let rebindHtml = '';
-          if (isAmbiguous && !msg.fromMe) {
-            // Find other active OPEN tickets to bind to
-            const otherTickets = complaintsData.filter(t => t.ticketId !== ticket.ticketId && t.status === 'OPEN');
-            if (otherTickets.length > 0) {
-              let selectOptions = otherTickets.map(ot => `<option value="${ot.ticketId}">${ot.ticketId}</option>`).join('');
-              rebindHtml = `
-                <div class="rebind-container">
-                  <span class="rebind-label">Rebind to:</span>
-                  <select class="rebind-select" id="rebind-${msg.timestamp.replace(/\D/g,'')}">
-                    ${selectOptions}
-                  </select>
-                  <button class="rebind-btn" onclick="rebindMessage('${ticket.ticketId}', '${msg.timestamp}', 'rebind-${msg.timestamp.replace(/\D/g,'')}')">Bind</button>
-                </div>
-              `;
-            }
-          }
-
           bubble.innerHTML = `
             <div class="bubble-meta">
-              <span style="font-weight: 600; color: ${isAmbiguous ? '#fbbf24' : ''};">${senderLabel}</span>
+              <span style="font-weight: 600;">${senderLabel}</span>
               <span>${metaTime}</span>
             </div>
-            <div class="bubble-text">${textDisplay}</div>
+            <div class="bubble-text">${msg.text}</div>
             ${attachmentBadge}
-            ${rebindHtml}
           `;
           timeline.appendChild(bubble);
         });
@@ -1077,66 +985,14 @@
       }
     }
 
-    async function rebindMessage(ticketId, timestamp, selectId) {
-      const selectEl = document.getElementById(selectId);
-      const targetTicketId = selectEl.value;
-      if (!targetTicketId) return;
-
+    async function copyAIDraft() {
+      const draftText = document.getElementById('modal-ai-draft-text').textContent;
+      if (!draftText || draftText === '-') return;
       try {
-        const response = await fetch(`/api/complaints/${ticketId}/bind-message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ timestamp, targetTicketId })
-        });
-        if (response.ok) {
-          showToast('✅ Message successfully rebound to another ticket.');
-          fetchComplaints();
-        } else {
-          showToast('❌ Failed to rebind message.');
-        }
+        await navigator.clipboard.writeText(draftText);
+        showToast('📋 AI reply draft copied to clipboard!');
       } catch (err) {
-        showToast('❌ Connection error.');
-      }
-    }
-
-    async function promoteActiveTicketFromModal() {
-      if (!activeDetailTicket) return;
-      const officialId = document.getElementById('modal-promotion-input').value.trim();
-      if (!officialId) {
-        alert('Please enter a valid official Complaint ID.');
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/complaints/${activeDetailTicket.ticketId}/promote`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ officialId })
-        });
-        const resData = await response.json();
-        if (response.ok) {
-          showToast(`✅ Successfully promoted ticket!`);
-          closeModal();
-          fetchComplaints();
-        } else {
-          showToast(`❌ Promotion failed: ${resData.error}`);
-        }
-      } catch (err) {
-        showToast('❌ Connection error.');
-      }
-    }
-
-    async function approveReviewFromModal() {
-      if (activeDetailTicket) {
-        await approveReview(activeDetailTicket.ticketId);
-        closeModal();
-      }
-    }
-
-    async function rejectReviewFromModal() {
-      if (activeDetailTicket) {
-        await rejectReview(activeDetailTicket.ticketId);
-        closeModal();
+        showToast('❌ Copy failed.');
       }
     }
 
@@ -1147,7 +1003,7 @@
 
     function closeTicketFromModal() {
       if (activeDetailTicket) {
-        closeComplaintTicket(activeDetailTicket.ticketId);
+        closeComplaintTicket(activeDetailTicket.complaintId);
         closeModal();
       }
     }
