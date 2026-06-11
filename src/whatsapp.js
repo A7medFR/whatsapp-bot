@@ -930,4 +930,4 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, closeActiveComplaintForSender, closeComplaintByTarget };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTempTicket, approveAttachment, rejectAttachment, bindMessageToTicket };
