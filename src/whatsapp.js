@@ -527,12 +527,28 @@ async function connect() {
   sock.ev.on('chats.set',     ({ chats } = {}) => extractChatLabels(chats));
   sock.ev.on('messaging-history.set', ({ chats } = {}) => extractChatLabels(chats));
 
+  // Deduplication cache for Baileys message events
+  const processedMessageIds = new Set();
+
   // ── Notify admin when a وزارة الصحة labeled chat sends a message ──────────
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
 
     for (const msg of messages) {
       if (!msg.message) continue;
+
+      // Deduplicate by message ID
+      if (msg.key.id) {
+        if (processedMessageIds.has(msg.key.id)) {
+          continue;
+        }
+        processedMessageIds.add(msg.key.id);
+        if (processedMessageIds.size > 200) {
+          const first = processedMessageIds.values().next().value;
+          processedMessageIds.delete(first);
+        }
+      }
+
       const sender = msg.key.remoteJid;
       if (!sender || sender.endsWith('@g.us')) continue;
 
