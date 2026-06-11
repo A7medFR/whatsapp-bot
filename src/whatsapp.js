@@ -265,7 +265,7 @@ async function processMOHMessagePipeline(msg, sock) {
   const hasAtt = hasAttachment(msg);
 
   let complaints = loadComplaintsCache();
-  const existingForPhone = complaints.filter(c => c.phone === phone);
+  const existingForPhone = complaints.filter(c => phoneNumbersMatch(c.phone || c.senderPhone || '', phone));
 
   // Hardcoded Instant Close Rule:
   // If we send an attachment file, it instantly changes the status to CLOSED, locking the counter.
@@ -304,6 +304,9 @@ async function processMOHMessagePipeline(msg, sock) {
       complaintId,
       phone,
       name: msg.pushName || 'وزارة الصحة',
+      // Store both styles for absolute safety and backward compatibility
+      senderPhone: phone,
+      senderName: msg.pushName || 'وزارة الصحة',
       status: 'OPEN',
       summary: decision.summary || 'شكوى جديدة',
       category: decision.category || 'أخرى',
@@ -576,7 +579,7 @@ async function connect() {
       const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || pushName.toLowerCase().includes('moh'));
       
       const complaints = loadComplaintsCache();
-      const hasActiveComplaint = complaints.some(c => c.phone === senderPhone && c.status === 'OPEN');
+      const hasActiveComplaint = complaints.some(c => phoneNumbersMatch(c.phone || c.senderPhone || '', senderPhone) && c.status === 'OPEN');
       const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName || hasActiveComplaint;
 
       if (isMOH) {

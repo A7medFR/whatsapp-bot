@@ -833,8 +833,8 @@
         if (statusFilter === 'pending' && c.status !== 'PENDING_REVIEW') return false;
 
         if (!search) return true;
-        const sender = (c.phone || '').toLowerCase();
-        const name = (c.name || '').toLowerCase();
+        const sender = (c.phone || c.senderPhone || '').toLowerCase();
+        const name = (c.name || c.senderName || '').toLowerCase();
         const cat = (c.category || '').toLowerCase();
         const sum = (c.summary || '').toLowerCase();
 
@@ -881,8 +881,8 @@
 
         tr.innerHTML = `
           <td>
-            <div style="font-weight: 600;">${c.name}</div>
-            <div><a href="https://wa.me/${c.phone}" target="_blank" class="phone-link">+${c.phone}</a></div>
+            <div style="font-weight: 600;">${c.name || c.senderName}</div>
+            <div><a href="https://wa.me/${c.phone || c.senderPhone}" target="_blank" class="phone-link">+${c.phone || c.senderPhone}</a></div>
           </td>
           <td style="font-weight: bold; color: var(--accent-green);">${c.category || 'أخرى'}</td>
           <td style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${c.summary || ''}">${c.summary || '-'}</td>
@@ -919,7 +919,7 @@
 
       activeDetailTicket = complaint;
       document.getElementById('modal-ticket-id').innerHTML = `MOH Complaint Tracker`;
-      document.getElementById('modal-sender-info').innerHTML = `Sender: <b>${complaint.name}</b> (+${complaint.phone}) | Status: <b>${complaint.status}</b>`;
+      document.getElementById('modal-sender-info').innerHTML = `Sender: <b>${complaint.name || complaint.senderName}</b> (+${complaint.phone || complaint.senderPhone}) | Status: <b>${complaint.status}</b>`;
       
       // Populate AI Insights
       document.getElementById('modal-ai-category').textContent = complaint.category || 'أخرى';
