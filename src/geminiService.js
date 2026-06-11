@@ -68,8 +68,8 @@ ${JSON.stringify(existingComplaints.map(t => ({ ticketId: t.ticketId || t.compla
 - Is Outbound (From Clinic): ${isOutbound}
 
 ### Critical Decision Matrix Mandates:
-1. CREATE: Select if an MOH Officer (inbound) opens a brand new case, or sends a message describing a complaint completely unrelated to listed active complaints. If an explicit registration number is referenced (e.g. 'بلاغ رقم 99214'), parse it out. If MOH sends a document/image (hasAttachment = true) and no complaint is active, select CREATE.
-2. INCREMENT: Select if an MOH Officer (inbound) follows up or provides data regarding one of the listed open tickets. You MUST specify the exact targetTicketId matching the history (this could be the ticketId or complaintId).
+1. CREATE: Select if an MOH Officer (inbound) opens a brand new case, or sends a message describing a complaint. IMPORTANT: You MUST ONLY select CREATE if there are NO active open complaints in the Ledger Records (Active Open Complaints list is empty). If there is already an OPEN complaint, you MUST NOT select CREATE.
+2. INCREMENT: Select if an MOH Officer (inbound) follows up or provides data regarding one of the listed open tickets, OR if they send any message while a complaint is already active (since we only track one active complaint at a time). You MUST specify the exact targetTicketId matching the history (this could be the ticketId or complaintId).
 3. CLOSE: Select if Clinic Staff pushes an attachment file or explicitly indicates resolution. Specify the targetTicketId to lock down. If MOH (inbound) explicitly thanks the clinic and confirms closure, select CLOSE.
 4. IGNORE: Select if the message contains non-actionable elements like greetings ('شكرا', 'السلام عليكم', 'مرحبا') or trivial validation checks without any active complaint, or if the message is general talk and shouldn't alter any ticket.
 

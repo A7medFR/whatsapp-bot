@@ -299,9 +299,19 @@ async function processMOHMessagePipeline(msg, sock) {
   });
 
   const action = decision.action;
-  const targetId = decision.targetTicketId || decision.matchedComplaintId;
+  let targetId = decision.targetTicketId || decision.matchedComplaintId;
 
-  if (action === 'CREATE' || action === 'OPEN_COMPLAINT') {
+  // Local State Safeguard: Force single active complaint check
+  const active = existingForPhone.find(c => c.status === 'OPEN');
+  let finalAction = action;
+
+  if ((action === 'CREATE' || action === 'OPEN_COMPLAINT') && active) {
+    logEvent(`⚠️ Gemini suggested opening a new complaint, but overridden locally because complaint ${active.complaintId || active.ticketId} is already OPEN for +${phone}. Routing instead.`, 'warn');
+    finalAction = 'INCREMENT';
+    targetId = active.complaintId || active.ticketId;
+  }
+
+  if (finalAction === 'CREATE' || finalAction === 'OPEN_COMPLAINT') {
     const finalTicketId = decision.extractedTicketId || `complaint_${phone}_${Math.floor(Date.now() / 1000)}`;
     const newComplaint = {
       complaintId: finalTicketId,
@@ -332,7 +342,7 @@ async function processMOHMessagePipeline(msg, sock) {
       await sendAdminAlertWithCounter(sock, phone, newComplaint.name, 1, text, true);
     }
   } 
-  else if ((action === 'INCREMENT' || action === 'ROUTE_TO_COMPLAINT') && targetId) {
+  else if ((finalAction === 'INCREMENT' || finalAction === 'ROUTE_TO_COMPLAINT') && targetId) {
     const target = complaints.find(c => c.complaintId === targetId || c.ticketId === targetId);
     if (target) {
       target.messages.push({
