@@ -429,9 +429,13 @@ app.get('/', async (_req, res) => {
       </div>
     </div>
 
-    <div id="connection-status" class="badge">
-      <div class="dot"></div>
-      <span id="status-text">Checking Status...</span>
+    <div style="display: flex; gap: 15px; align-items: center;">
+      <button onclick="window.location.href='/kpi'" style="background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; padding: 8px 16px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; backdrop-filter: blur(12px); font-family: inherit; transition: all 0.3s ease;">📊 Agent KPI Dashboard</button>
+      <button onclick="window.location.href='/complaints'" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; padding: 8px 16px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; backdrop-filter: blur(12px); font-family: inherit; transition: all 0.3s ease;">🚨 MOH Complaints</button>
+      <div id="connection-status" class="badge">
+        <div class="dot"></div>
+        <span id="status-text">Checking Status...</span>
+      </div>
     </div>
   </header>
 
@@ -672,6 +676,10 @@ app.get('/', async (_req, res) => {
 </html>`);
 });
 
+app.get('/kpi', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'kpi.html'));
+});
+
 /** Real-time Connection Status JSON Endpoint */
 app.get('/bot-status', (_req, res) => {
   const { connected, hasQR, qr } = wa.getStatus();
@@ -770,6 +778,37 @@ app.get('/labels', requireApiKey, (_req, res) => {
     color: l.color,
   }));
   res.json({ count: list.length, labels: list });
+});
+
+/**
+ * GET /complaints
+ * Serves the MOH Complaints Tracker HTML interface.
+ */
+app.get('/complaints', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'complaints.html'));
+});
+
+/**
+ * GET /api/complaints
+ * Returns JSON array of all tracked complaints.
+ */
+app.get('/api/complaints', (_req, res) => {
+  const list = wa.getComplaintsStore() || [];
+  res.json({ count: list.length, complaints: list });
+});
+
+/**
+ * POST /api/complaints/:id/close
+ * Manually closes a specific complaint by ID.
+ */
+app.post('/api/complaints/:id/close', (req, res) => {
+  const { id } = req.params;
+  const success = wa.closeComplaint(id);
+  if (success) {
+    res.json({ success: true, message: `Complaint ${id} successfully marked as closed.` });
+  } else {
+    res.status(404).json({ error: `Active complaint with ID ${id} not found.` });
+  }
 });
 
 /**

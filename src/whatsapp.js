@@ -138,6 +138,137 @@ function saveChatLabelsCache() {
   } catch (_) { /* ignore */ }
 }
 
+// ─── Complaints Tracker State & Helpers ────────────────────────────────────────
+const COMPLAINTS_FILE = path.resolve('./complaints_cache.json');
+let complaintsStore = [];
+
+function loadComplaintsCache() {
+  try {
+    if (fs.existsSync(COMPLAINTS_FILE)) {
+      complaintsStore = JSON.parse(fs.readFileSync(COMPLAINTS_FILE, 'utf8')) || [];
+      console.log(`📋 Loaded ${complaintsStore.length} complaints from cache.`);
+    }
+  } catch (err) {
+    console.error(`Failed to load complaints cache: ${err.message}`);
+  }
+}
+
+function saveComplaintsCache() {
+  try {
+    fs.writeFileSync(COMPLAINTS_FILE, JSON.stringify(complaintsStore, null, 2), 'utf8');
+  } catch (err) {
+    console.error(`Failed to save complaints cache: ${err.message}`);
+  }
+}
+
+function getComplaintsStore() {
+  return complaintsStore;
+}
+
+function closeComplaint(id) {
+  const c = complaintsStore.find(x => x.id === id);
+  if (c && c.status === 'open') {
+    c.status = 'closed';
+    c.closedAt = new Date().toISOString();
+    saveComplaintsCache();
+    logEvent(`✅ Complaint (${c.id}) closed manually.`, 'info');
+    return true;
+  }
+  return false;
+}
+
+function closeActiveComplaintForSender(phone) {
+  const c = complaintsStore.find(x => x.senderPhone === phone && x.status === 'open');
+  if (c) {
+    c.status = 'closed';
+    c.closedAt = new Date().toISOString();
+    saveComplaintsCache();
+    logEvent(`✅ Complaint (${c.id}) for +${phone} closed.`, 'info');
+    return true;
+  }
+  return false;
+}
+
+function closeComplaintByTarget(target) {
+  const clean = target.replace(/\D/g, '');
+  let c = complaintsStore.find(x => x.id === target && x.status === 'open');
+  if (!c && clean) {
+    c = complaintsStore.find(x => x.complaintNumber === clean && x.status === 'open');
+  }
+  if (!c && clean) {
+    c = complaintsStore.find(x => x.senderPhone === clean && x.status === 'open');
+  }
+  
+  if (c) {
+    c.status = 'closed';
+    c.closedAt = new Date().toISOString();
+    saveComplaintsCache();
+    logEvent(`✅ Complaint (${c.id}) closed via target: ${target}`, 'info');
+    return c;
+  }
+  return null;
+}
+
+function hasAttachment(msg) {
+  const m = msg?.message;
+  if (!m) return false;
+  
+  const checkMedia = (obj) => {
+    if (!obj) return false;
+    return !!(
+      obj.documentMessage ||
+      obj.imageMessage ||
+      obj.videoMessage ||
+      obj.audioMessage ||
+      obj.documentWithCaptionMessage ||
+      obj.stickerMessage
+    );
+  };
+
+  if (checkMedia(m)) return true;
+
+  const unwrapped = m.ephemeralMessage?.message || m.viewOnceMessage?.message || m.viewOnceMessageV2?.message;
+  if (unwrapped && checkMedia(unwrapped)) return true;
+
+  return false;
+}
+
+function getMessageText(msg) {
+  const c = msg?.message;
+  if (!c) return '';
+  
+  let text = c.conversation || c.extendedTextMessage?.text || '';
+  if (!text && c.imageMessage?.caption) text = c.imageMessage.caption;
+  if (!text && c.videoMessage?.caption) text = c.videoMessage.caption;
+  if (!text && c.documentMessage?.title) text = c.documentMessage.title;
+  
+  const wrapped = c.ephemeralMessage?.message || c.viewOnceMessage?.message || c.viewOnceMessageV2?.message;
+  if (wrapped) {
+    if (!text && wrapped.conversation) text = wrapped.conversation;
+    if (!text && wrapped.extendedTextMessage?.text) text = wrapped.extendedTextMessage.text;
+    if (!text && wrapped.imageMessage?.caption) text = wrapped.imageMessage.caption;
+    if (!text && wrapped.videoMessage?.caption) text = wrapped.videoMessage.caption;
+    if (!text && wrapped.documentMessage?.title) text = wrapped.documentMessage.title;
+  }
+  
+  return text;
+}
+
+function extractComplaintNumber(text) {
+  if (!text) return null;
+  const patterns = [
+    /(?:رقم\s+الشكوى|الشكوى\s+رقم|بلاغ\s+رقم|رقم\s+البلاغ|تذكرة\s+رقم|الطلب\s+رقم|ticket|complaint|case|request)[:\s#]*(\d{5,12})/i,
+    /\b(\d{6,12})\b/
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
 // ─── Label helpers ────────────────────────────────────────────────────────────
 function findLabelId(labelName) {
   // 1. Look up by name in store (populated by passive events if available)
@@ -191,6 +322,7 @@ async function connect() {
   restoreSession();   // Restore session from WA_SESSION_B64 env var (Back4App / cloud)
   loadLabelCache();
   loadChatLabelsCache();
+  loadComplaintsCache();
 
   const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -286,22 +418,11 @@ async function connect() {
     if (type !== 'notify') return;
 
     for (const msg of messages) {
-      if (msg.key.fromMe || !msg.message) continue;
+      if (!msg.message) continue;
       const sender = msg.key.remoteJid;
       if (!sender || sender.endsWith('@g.us')) continue;
 
       const senderPhone = sender.replace('@s.whatsapp.net', '');
-      
-      // Simulate reading the message (anti-ban read receipt simulation)
-      if (SIMULATE_READ_RECEIPTS && sock) {
-        try {
-          await sock.readMessages([msg.key]);
-          logEvent(`🔵 Marked message read from +${senderPhone}`, 'info');
-        } catch (readErr) {
-          // Ignore read errors
-        }
-      }
-
       const pushName    = msg.pushName || '';
 
       // Resolve LID JIDs to Phone Numbers (PNs)
@@ -319,7 +440,7 @@ async function connect() {
         resolvedPhone = resolvedJid.replace('@s.whatsapp.net', '');
       }
 
-      if (!resolvedPhone && sender.endsWith('@lid')) {
+      if (!resolvedPhone && sender.endsWith('@lid') && !msg.key.fromMe) {
         try {
           const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(sender);
           if (pn) {
@@ -340,44 +461,195 @@ async function connect() {
       ].map(String);
 
       const isMOHLabel    = mohLabelId && knownLabels.includes(String(mohLabelId));
-      
-      // Compare both sender JID phone and the resolved PN phone against the MOH list
       const isMOHNumber   = MOH_NUMBERS.some(num => 
         phoneNumbersMatch(senderPhone, num) || (resolvedPhone && phoneNumbersMatch(resolvedPhone, num))
       );
       
-      const isMOHPushName = pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || pushName.toLowerCase().includes('moh');
+      const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || pushName.toLowerCase().includes('moh'));
       const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName;
+
+      // 1. Handle Outgoing Messages (Clinic responses to MOH)
+      if (msg.key.fromMe) {
+        if (isMOH) {
+          const activeComplaint = complaintsStore.find(c => c.senderPhone === senderPhone && c.status === 'open');
+          if (activeComplaint) {
+            const hasAtt = hasAttachment(msg);
+            const textContent = getMessageText(msg);
+
+            if (hasAtt) {
+              // Outgoing attachment closes the active complaint
+              activeComplaint.status = 'closed';
+              activeComplaint.closedAt = new Date().toISOString();
+              activeComplaint.messages.push({
+                timestamp: new Date().toISOString(),
+                text: textContent || '(ملف رد مرفق)',
+                fromMe: true,
+                hasAttachment: true
+              });
+              saveComplaintsCache();
+              logEvent(`✅ Complaint (${activeComplaint.id}) for +${senderPhone} closed automatically via outgoing clinic response attachment.`, 'info');
+            } else if (textContent) {
+              // Check if clinic sent manual /close keyword
+              if (textContent.trim() === '/close' || textContent.trim() === '/اغلاق' || textContent.trim() === 'اغلاق') {
+                activeComplaint.status = 'closed';
+                activeComplaint.closedAt = new Date().toISOString();
+                saveComplaintsCache();
+                logEvent(`✅ Complaint (${activeComplaint.id}) for +${senderPhone} closed manually via clinic chat command.`, 'info');
+                try {
+                  await sock.sendMessage(sender, { text: `✅ [نظام] تم تسجيل إغلاق الشكوى الحالية. شكراً لكم.` });
+                } catch (_) {}
+              } else {
+                // Regular clinic text response - log message to conversation history
+                activeComplaint.messages.push({
+                  timestamp: new Date().toISOString(),
+                  text: textContent,
+                  fromMe: true,
+                  hasAttachment: false
+                });
+                saveComplaintsCache();
+              }
+            }
+          }
+        }
+        continue;
+      }
+
+      // Simulate reading the message (anti-ban read receipt simulation)
+      if (SIMULATE_READ_RECEIPTS && sock) {
+        try {
+          await sock.readMessages([msg.key]);
+          logEvent(`🔵 Marked message read from +${senderPhone}`, 'info');
+        } catch (readErr) {
+          // Ignore read errors
+        }
+      }
+
+      // 2. Admin commands sent directly to the bot
+      const isAdmin = FORWARD_NUMBERS.some(num => phoneNumbersMatch(senderPhone, num));
+      if (isAdmin) {
+        const textContent = getMessageText(msg);
+        if (textContent.startsWith('/close') || textContent.startsWith('/اغلاق')) {
+          const parts = textContent.split(/\s+/);
+          const target = parts[1]; // e.g. complaint number or phone number
+          if (target) {
+            const closed = closeComplaintByTarget(target);
+            if (closed) {
+              await sock.sendMessage(sender, { text: `✅ تم إغلاق الشكوى/البلاغ رقم: ${target} بنجاح. (إجمالي الرسائل: ${closed.messageCount})` });
+            } else {
+              await sock.sendMessage(sender, { text: `❌ لم يتم العثور على شكوى مفتوحة بالرقم أو الهاتف: ${target}` });
+            }
+          } else {
+            await sock.sendMessage(sender, { text: `⚠️ يرجى تحديد رقم الشكوى أو رقم الهاتف، مثال:\n/close 123456\n/close 966505190413` });
+          }
+          continue;
+        }
+      }
 
       // Log receipt and classification to diagnostics console
       const displaySender = resolvedPhone ? `${senderPhone} (PN: ${resolvedPhone})` : senderPhone;
       logEvent(`📩 Incoming message from +${displaySender} (${pushName || 'No Name'})`, 'info');
       logEvent(`🔍 MOH Check details for +${displaySender} -> isMOHLabel: ${isMOHLabel} (Label ID: ${mohLabelId}, Chat Labels: [${knownLabels.join(', ')}]), isMOHNumber: ${isMOHNumber} (MOH list: [${MOH_NUMBERS.join(', ')}]), isMOHPushName: ${isMOHPushName}`, 'info');
 
+      // 3. Handle incoming messages from MOH
       if (isMOH) {
         logEvent(`🚨 وزارة الصحة (MOH) message detected from +${senderPhone}! (Labels: [${knownLabels.join(', ')}], Match Number: ${isMOHNumber}, Match Name: ${isMOHPushName})`, 'warn');
+
+        const hasAtt = hasAttachment(msg);
+        const textContent = getMessageText(msg);
+        
+        let complaint = null;
+        
+        if (hasAtt) {
+          // Open a new complaint
+          const complaintId = `complaint_${Date.now()}`;
+          const compNum = extractComplaintNumber(textContent);
+          
+          // Close any existing open complaints for this sender first
+          complaintsStore.forEach(c => {
+            if (c.senderPhone === senderPhone && c.status === 'open') {
+              c.status = 'closed';
+              c.closedAt = new Date().toISOString();
+              logEvent(`ℹ️ Auto-closed previous open complaint (${c.id}) for +${senderPhone} because a new attachment was received.`, 'info');
+            }
+          });
+          
+          complaint = {
+            id: complaintId,
+            complaintNumber: compNum,
+            senderPhone,
+            senderName: pushName || 'وزارة الصحة',
+            status: 'open',
+            messageCount: 1,
+            createdAt: new Date().toISOString(),
+            closedAt: null,
+            messages: [
+              {
+                timestamp: new Date().toISOString(),
+                text: textContent || '(ملف شكوى مرفق)',
+                fromMe: false,
+                hasAttachment: true
+              }
+            ]
+          };
+          
+          complaintsStore.push(complaint);
+          saveComplaintsCache();
+          logEvent(`🚨 New complaint opened (${complaintId}) for +${senderPhone} (No: ${compNum || 'N/A'}).`, 'warn');
+        } else {
+          // Text-only message - increment existing open complaint
+          complaint = complaintsStore.find(c => c.senderPhone === senderPhone && c.status === 'open');
+          
+          if (complaint) {
+            complaint.messageCount++;
+            complaint.messages.push({
+              timestamp: new Date().toISOString(),
+              text: textContent || '(رسالة جديدة)',
+              fromMe: false,
+              hasAttachment: false
+            });
+            // Try to extract complaint number if not already set
+            if (!complaint.complaintNumber) {
+              const compNum = extractComplaintNumber(textContent);
+              if (compNum) {
+                complaint.complaintNumber = compNum;
+                logEvent(`✏️ Updated complaint number for ${complaint.id} -> ${compNum}`, 'info');
+              }
+            }
+            saveComplaintsCache();
+            logEvent(`📩 Incremented message count for complaint ${complaint.id} to ${complaint.messageCount}.`, 'info');
+          } else {
+            logEvent(`ℹ️ Received text from MOH +${senderPhone} but no active complaint is open. Skipping count.`, 'info');
+          }
+        }
 
         if (FORWARD_NUMBERS.length === 0) {
           logEvent(`⚠️ Alert forwarding aborted: FORWARD_NUMBERS is empty in .env.`, 'warn');
           continue;
         }
 
-        const c = msg.message;
-        const preview =
-          c?.conversation ||
-          c?.extendedTextMessage?.text ||
-          c?.imageMessage?.caption ||
-          c?.videoMessage?.caption ||
-          c?.documentMessage?.title ||
-          (c?.audioMessage    ? '(رسالة صوتية)' :
-           c?.imageMessage    ? '(صورة)'         :
-           c?.videoMessage    ? '(فيديو)'         :
-           c?.documentMessage ? '(ملف)'           : '(رسالة جديدة)');
+        const preview = textContent || (
+          msg.message.audioMessage ? '(رسالة صوتية)' :
+          msg.message.imageMessage ? '(صورة)' :
+          msg.message.videoMessage ? '(فيديو)' :
+          msg.message.documentMessage ? '(ملف)' : '(رسالة جديدة)'
+        );
+
+        let complaintDetails = '';
+        if (complaint) {
+          const compNumText = complaint.complaintNumber ? complaint.complaintNumber : 'غير محدد بعد';
+          complaintDetails = 
+            `🔢 رقم الشكوى: ${compNumText}\n` +
+            `📊 الرسالة رقم: ${complaint.messageCount}\n` +
+            `📦 حالة الشكوى: مفتوحة (جاري المتابعة)\n\n`;
+        } else {
+          complaintDetails = `📦 حالة الشكوى: لا توجد شكوى مفتوحة حالياً (رسالة عامة)\n\n`;
+        }
 
         const notification =
           `🚨 *تنبيه عاجل — رسالة جديدة من وزارة الصحة* 🚨\n\n` +
           `📱 المرسل: +${senderPhone}\n` +
           `👤 الاسم: ${pushName}\n` +
+          complaintDetails +
           `💬 الرسالة: ${preview}\n\n` +
           `يرجى فتح واتساب والرد على الرسالة فوراً.`;
 
@@ -630,4 +902,4 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, closeActiveComplaintForSender, closeComplaintByTarget };
