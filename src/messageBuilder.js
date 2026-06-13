@@ -47,7 +47,7 @@ function buildServicesText(offer) {
       // Clean option name from "بعد خصم الـ 7% بسبب كاس العالم (شخصين)" and similar variations
       option = option.replace(/\s*\(?بعد\s+خصم\s+الـ?\s*[7٧]%\s+بسبب\s+كأ?س\s+العالم(?:\s*\(?شخصين\)?)?\)*/gi, '').trim();
 
-      const price = Number(svc.price_after ?? svc.price_after_tax ?? svc.price ?? 0);
+      const price = Number(svc.price ?? svc.price_before_tax ?? svc.price_after ?? svc.price_after_tax ?? 0);
       if (svc.price_after !== undefined && svc.price_after !== null && svc.price_after !== '') {
         hasDiscountedPrice = true;
       }
@@ -61,7 +61,7 @@ function buildServicesText(offer) {
   if (hasDiscountedPrice) {
     lines.push(`🎁 العرض يشمل خصم 7%!`);
   } else {
-    lines.push(`✅ جميع الأسعار شاملة الضريبة`);
+    lines.push(`✅ جميع الأسعار قبل الضريبة`);
   }
 
   return lines.join('\n');
