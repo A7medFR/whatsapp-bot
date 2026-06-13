@@ -36,18 +36,29 @@ function buildServicesText(offer) {
   const lines = [`📋 *تفاصيل عرض: ${offer.title}*`, `━━━━━━━━━━━━━━━━━━━━`];
 
   const services = Array.isArray(offer.services) ? offer.services : [];
+  let hasDiscountedPrice = false;
+
   if (services.length === 0) {
     lines.push('   يرجى التواصل معنا للاستفسار عن التفاصيل.');
   } else {
     for (const svc of services) {
-      const price = Number(svc.price_after ?? svc.price_after_tax ?? svc.price ?? 0);
-      const priceStr = price > 0 ? `${price.toLocaleString('ar-SA')} ريال` : 'السعر عند الاستفسار';
-      lines.push(`   • ${svc.option}  ←  ${priceStr}`);
+      if (svc.price_after !== undefined && svc.price_after !== null && svc.price_after !== '') {
+        hasDiscountedPrice = true;
+        lines.push(`   • ${svc.option}`);
+      } else {
+        const price = Number(svc.price_after_tax ?? svc.price ?? svc.price_before_tax ?? 0);
+        const priceStr = price > 0 ? `${price.toLocaleString('ar-SA')} ريال` : 'السعر عند الاستفسار';
+        lines.push(`   • ${svc.option}  ←  ${priceStr}`);
+      }
     }
   }
 
   lines.push(`━━━━━━━━━━━━━━━━━━━━`);
-  lines.push(`✅ جميع الأسعار شاملة الضريبة`);
+  if (hasDiscountedPrice) {
+    lines.push(`🎁 العرض يشمل خصم 7%!`);
+  } else {
+    lines.push(`✅ جميع الأسعار شاملة الضريبة`);
+  }
 
   return lines.join('\n');
 }
