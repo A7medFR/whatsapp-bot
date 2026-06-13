@@ -39,27 +39,21 @@ function buildServicesText(offer) {
   
   let hasTwoPricesOffer = false;
 
+  const discountRegex = /بعد\s+خصم|بسبب\s+كأ?س\s+العالم/i;
+
   if (services.length === 0) {
     lines.push('   يرجى التواصل معنا للاستفسار عن التفاصيل.');
   } else {
     for (const svc of services) {
       let option = svc.option || '';
-      option = option.replace(/\s*\(?بعد\s+خصم\s+الـ?\s*[7٧]%\s+بسبب\s+كأ?س\s+العالم(?:\s*\(?شخصين\)?)?\)*/gi, '').trim();
 
-      const originalPrice = svc.price ?? svc.price_before_tax;
-      const discountedPrice = svc.price_after;
-
-      const hasBoth = (originalPrice !== undefined && originalPrice !== null && originalPrice !== '') &&
-                      (discountedPrice !== undefined && discountedPrice !== null && discountedPrice !== '');
-
-      let price;
-      if (hasBoth) {
+      // If this row contains the discount/World Cup text, we skip it and show the 7% banner at the bottom
+      if (discountRegex.test(option)) {
         hasTwoPricesOffer = true;
-        price = Number(originalPrice);
-      } else {
-        price = Number(svc.price_after ?? svc.price_after_tax ?? svc.price ?? svc.price_before_tax ?? 0);
+        continue;
       }
-      
+
+      const price = Number(svc.price_after ?? svc.price_after_tax ?? svc.price ?? svc.price_before_tax ?? 0);
       const priceStr = price > 0 ? `${price.toLocaleString('ar-SA')} ريال` : 'السعر عند الاستفسار';
       lines.push(`   • ${option}  ←  ${priceStr}`);
     }
