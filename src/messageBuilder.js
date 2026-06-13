@@ -42,14 +42,18 @@ function buildServicesText(offer) {
     lines.push('   يرجى التواصل معنا للاستفسار عن التفاصيل.');
   } else {
     for (const svc of services) {
+      let option = svc.option || '';
+      
+      // Clean option name from "بعد خصم الـ 7% بسبب كاس العالم (شخصين)" and similar variations
+      option = option.replace(/\s*\(?بعد\s+خصم\s+الـ?\s*[7٧]%\s+بسبب\s+كأ?س\s+العالم(?:\s*\(?شخصين\)?)?\)*/gi, '').trim();
+
+      const price = Number(svc.price_after ?? svc.price_after_tax ?? svc.price ?? 0);
       if (svc.price_after !== undefined && svc.price_after !== null && svc.price_after !== '') {
         hasDiscountedPrice = true;
-        lines.push(`   • ${svc.option}`);
-      } else {
-        const price = Number(svc.price_after_tax ?? svc.price ?? svc.price_before_tax ?? 0);
-        const priceStr = price > 0 ? `${price.toLocaleString('ar-SA')} ريال` : 'السعر عند الاستفسار';
-        lines.push(`   • ${svc.option}  ←  ${priceStr}`);
       }
+      
+      const priceStr = price > 0 ? `${price.toLocaleString('ar-SA')} ريال` : 'السعر عند الاستفسار';
+      lines.push(`   • ${option}  ←  ${priceStr}`);
     }
   }
 
