@@ -36,20 +36,28 @@ function buildServicesText(offer) {
   const lines = [`📋 *تفاصيل عرض: ${offer.title}*`, `━━━━━━━━━━━━━━━━━━━━`];
 
   const services = Array.isArray(offer.services) ? offer.services : [];
-  let hasDiscountedPrice = false;
+  
+  let hasTwoPricesOffer = false;
 
   if (services.length === 0) {
     lines.push('   يرجى التواصل معنا للاستفسار عن التفاصيل.');
   } else {
     for (const svc of services) {
       let option = svc.option || '';
-      
-      // Clean option name from "بعد خصم الـ 7% بسبب كاس العالم (شخصين)" and similar variations
       option = option.replace(/\s*\(?بعد\s+خصم\s+الـ?\s*[7٧]%\s+بسبب\s+كأ?س\s+العالم(?:\s*\(?شخصين\)?)?\)*/gi, '').trim();
 
-      const price = Number(svc.price ?? svc.price_before_tax ?? svc.price_after ?? svc.price_after_tax ?? 0);
-      if (svc.price_after !== undefined && svc.price_after !== null && svc.price_after !== '') {
-        hasDiscountedPrice = true;
+      const originalPrice = svc.price ?? svc.price_before_tax;
+      const discountedPrice = svc.price_after;
+
+      const hasBoth = (originalPrice !== undefined && originalPrice !== null && originalPrice !== '') &&
+                      (discountedPrice !== undefined && discountedPrice !== null && discountedPrice !== '');
+
+      let price;
+      if (hasBoth) {
+        hasTwoPricesOffer = true;
+        price = Number(originalPrice);
+      } else {
+        price = Number(svc.price_after ?? svc.price_after_tax ?? svc.price ?? svc.price_before_tax ?? 0);
       }
       
       const priceStr = price > 0 ? `${price.toLocaleString('ar-SA')} ريال` : 'السعر عند الاستفسار';
@@ -58,10 +66,10 @@ function buildServicesText(offer) {
   }
 
   lines.push(`━━━━━━━━━━━━━━━━━━━━`);
-  if (hasDiscountedPrice) {
+  if (hasTwoPricesOffer) {
     lines.push(`🎁 العرض يشمل خصم 7%!`);
   } else {
-    lines.push(`✅ جميع الأسعار قبل الضريبة`);
+    lines.push(`✅ جميع الأسعار شاملة الضريبة`);
   }
 
   return lines.join('\n');
