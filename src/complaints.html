@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Patrix Medical — MOH Complaints Tracker (v2)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Outfit:wght@300;400;600;800&display=swap"
+    rel="stylesheet">
   <style>
     :root {
       --bg-dark: #080d16;
@@ -20,17 +23,17 @@
       --border-color: rgba(255, 255, 255, 0.08);
       --card-bg-gradient: linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.8) 100%);
     }
-    
+
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
-    
+
     body {
       font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: var(--bg-dark);
-      background-image: 
+      background-image:
         radial-gradient(at 0% 0%, rgba(239, 68, 68, 0.08) 0px, transparent 50%),
         radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.05) 0px, transparent 50%);
       background-attachment: fixed;
@@ -40,7 +43,7 @@
       flex-direction: column;
       padding: 30px;
     }
-    
+
     header {
       display: flex;
       justify-content: space-between;
@@ -49,23 +52,30 @@
       padding-bottom: 20px;
       border-bottom: 1px solid var(--border-color);
     }
-    
+
     .logo-container {
       display: flex;
       align-items: center;
       gap: 12px;
     }
-    
+
     .logo-icon {
       font-size: 2.2rem;
       animation: pulse-icon 3s infinite ease-in-out;
     }
-    
+
     @keyframes pulse-icon {
-      0%, 100% { transform: scale(1) rotate(0deg); }
-      50% { transform: scale(1.05) rotate(3deg); }
+
+      0%,
+      100% {
+        transform: scale(1) rotate(0deg);
+      }
+
+      50% {
+        transform: scale(1.05) rotate(3deg);
+      }
     }
-    
+
     .logo-text h1 {
       font-size: 1.6rem;
       font-weight: 800;
@@ -74,7 +84,7 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    
+
     .logo-text p {
       font-size: 0.8rem;
       color: var(--text-muted);
@@ -96,20 +106,23 @@
       gap: 8px;
       transition: all 0.2s;
     }
-    
+
     .btn:hover {
       background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255,255,255,0.15);
+      border-color: rgba(255, 255, 255, 0.15);
       transform: translateY(-1px);
     }
-    
+
     .btn-accent {
       background: rgba(59, 130, 246, 0.15);
       border-color: rgba(59, 130, 246, 0.3);
       color: #93c5fd;
       font-weight: 600;
     }
-    .btn-accent:hover { background: rgba(59, 130, 246, 0.25); }
+
+    .btn-accent:hover {
+      background: rgba(59, 130, 246, 0.25);
+    }
 
     .btn-danger {
       background: rgba(239, 68, 68, 0.15);
@@ -117,7 +130,10 @@
       color: #fca5a5;
       font-weight: 600;
     }
-    .btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.25); }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.25);
+    }
 
     .btn-warning {
       background: rgba(245, 158, 11, 0.15);
@@ -125,7 +141,10 @@
       color: #fde047;
       font-weight: 600;
     }
-    .btn-warning:hover:not(:disabled) { background: rgba(245, 158, 11, 0.25); }
+
+    .btn-warning:hover:not(:disabled) {
+      background: rgba(245, 158, 11, 0.25);
+    }
 
     .btn-success {
       background: rgba(16, 185, 129, 0.15);
@@ -133,7 +152,10 @@
       color: #a7f3d0;
       font-weight: 600;
     }
-    .btn-success:hover:not(:disabled) { background: rgba(16, 185, 129, 0.25); }
+
+    .btn-success:hover:not(:disabled) {
+      background: rgba(16, 185, 129, 0.25);
+    }
 
     .btn:disabled {
       opacity: 0.3;
@@ -149,24 +171,24 @@
       gap: 20px;
       margin-bottom: 25px;
     }
-    
+
     .metric-card {
       background: var(--card-bg-gradient);
       border: 1px solid var(--border-color);
       border-radius: 16px;
       padding: 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       transition: all 0.3s;
     }
-    
+
     .metric-card:hover {
       transform: translateY(-2px);
       border-color: rgba(255, 255, 255, 0.15);
     }
-    
+
     .metric-title {
       font-size: 0.8rem;
       font-weight: 600;
@@ -175,7 +197,7 @@
       letter-spacing: 0.5px;
       margin-bottom: 8px;
     }
-    
+
     .metric-value {
       font-size: 2.2rem;
       font-weight: 800;
@@ -227,7 +249,7 @@
       align-items: center;
       flex-wrap: wrap;
     }
-    
+
     .search-input {
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid var(--border-color);
@@ -239,7 +261,7 @@
       width: 230px;
       transition: all 0.2s;
     }
-    
+
     .search-input:focus {
       border-color: var(--accent-blue);
       background: rgba(255, 255, 255, 0.06);
@@ -256,7 +278,10 @@
       cursor: pointer;
       transition: all 0.2s;
     }
-    .select-input:focus { border-color: var(--accent-blue); }
+
+    .select-input:focus {
+      border-color: var(--accent-blue);
+    }
 
     /* Table styling */
     .table-container {
@@ -265,14 +290,14 @@
       border: 1px solid var(--border-color);
       background: rgba(3, 7, 18, 0.2);
     }
-    
+
     table {
       width: 100%;
       border-collapse: collapse;
       text-align: left;
       font-size: 0.88rem;
     }
-    
+
     th {
       background: rgba(15, 23, 42, 0.9);
       color: var(--text-muted);
@@ -283,13 +308,13 @@
       font-size: 0.75rem;
       letter-spacing: 0.5px;
     }
-    
+
     td {
       padding: 14px 18px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.04);
       color: var(--text-main);
     }
-    
+
     tr:hover td {
       background: rgba(255, 255, 255, 0.015);
     }
@@ -313,7 +338,7 @@
       font-weight: 600;
       margin-top: 4px;
     }
-    
+
     /* State-Adaptive Badges */
     .badge-status {
       display: inline-flex;
@@ -324,7 +349,7 @@
       font-size: 0.75rem;
       font-weight: 600;
     }
-    
+
     .badge-open {
       background: rgba(239, 68, 68, 0.15);
       color: #f87171;
@@ -333,10 +358,17 @@
     }
 
     @keyframes pulse-open {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.75; }
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.75;
+      }
     }
-    
+
     .badge-pending {
       background: rgba(245, 158, 11, 0.15);
       color: #fbbf24;
@@ -360,7 +392,10 @@
       text-decoration: none;
       font-weight: 500;
     }
-    .phone-link:hover { text-decoration: underline; }
+
+    .phone-link:hover {
+      text-decoration: underline;
+    }
 
     /* Modal Overlay */
     .overlay {
@@ -379,12 +414,12 @@
       pointer-events: none;
       transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    
+
     .overlay.show {
       opacity: 1;
       pointer-events: auto;
     }
-    
+
     .modal {
       background: var(--bg-dark);
       border: 1px solid var(--border-color);
@@ -393,7 +428,7 @@
       max-width: 750px;
       max-height: 85vh;
       overflow-y: auto;
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
       padding: 30px;
       display: flex;
       flex-direction: column;
@@ -402,11 +437,11 @@
       transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       background-image: radial-gradient(at 100% 0%, rgba(245, 158, 11, 0.04) 0px, transparent 40%);
     }
-    
+
     .overlay.show .modal {
       transform: translateY(0);
     }
-    
+
     .modal-header {
       display: flex;
       justify-content: space-between;
@@ -414,7 +449,7 @@
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       padding-bottom: 15px;
     }
-    
+
     .modal-title h2 {
       font-size: 1.4rem;
       font-weight: 800;
@@ -422,13 +457,13 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    
+
     .modal-title p {
       font-size: 0.85rem;
       color: var(--text-muted);
       margin-top: 4px;
     }
-    
+
     .close-btn {
       font-size: 1.5rem;
       background: transparent;
@@ -437,7 +472,10 @@
       cursor: pointer;
       transition: color 0.2s;
     }
-    .close-btn:hover { color: var(--text-main); }
+
+    .close-btn:hover {
+      color: var(--text-main);
+    }
 
     /* Conversation Timeline */
     .timeline {
@@ -545,7 +583,10 @@
       font-weight: 600;
       transition: all 0.2s;
     }
-    .rebind-btn:hover { background: rgba(245, 158, 11, 0.25); }
+
+    .rebind-btn:hover {
+      background: rgba(245, 158, 11, 0.25);
+    }
 
     /* Promotion Portal Row UI */
     .promotion-card {
@@ -586,13 +627,17 @@
       outline: none;
       flex: 1;
     }
-    .promotion-input:focus { border-color: var(--accent-blue); }
+
+    .promotion-input:focus {
+      border-color: var(--accent-blue);
+    }
 
     .empty-state {
       text-align: center;
       padding: 50px 20px;
       color: var(--text-muted);
     }
+
     .empty-state-icon {
       font-size: 3rem;
       margin-bottom: 15px;
@@ -614,11 +659,13 @@
       transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       z-index: 200;
     }
+
     .toast.show {
       transform: translateX(-50%) translateY(0);
     }
   </style>
 </head>
+
 <body>
 
   <header>
@@ -672,13 +719,8 @@
     <div class="panel-header">
       <h2 class="panel-title" id="panel-head-title">📁 Tracked Complaints Archive</h2>
       <div class="controls-row">
-        <input 
-          type="text" 
-          id="search-box" 
-          class="search-input" 
-          placeholder="Search phone, name or ticket ID..." 
-          oninput="renderComplaintsTable()"
-        />
+        <input type="text" id="search-box" class="search-input" placeholder="Search phone, name or ticket ID..."
+          oninput="renderComplaintsTable()" />
         <select id="filter-status" class="select-input" onchange="renderComplaintsTable()">
           <option value="all">All Statuses</option>
           <option value="open">Open Only</option>
@@ -722,22 +764,33 @@
       </div>
 
       <!-- AI Insights Panel -->
-      <div id="modal-ai-insights" style="background: rgba(16, 185, 129, 0.04); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 12px; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
+      <div id="modal-ai-insights"
+        style="background: rgba(16, 185, 129, 0.04); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 12px; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
         <div style="display: flex; align-items: center; justify-content: space-between;">
           <div>
-            <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">AI Category:</span>
-            <span id="modal-ai-category" style="font-weight: bold; color: var(--accent-green); margin-left: 10px; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 6px;">-</span>
+            <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">AI
+              Category:</span>
+            <span id="modal-ai-category"
+              style="font-weight: bold; color: var(--accent-green); margin-left: 10px; background: rgba(16, 185, 129, 0.1); padding: 2px 8px; border-radius: 6px;">-</span>
           </div>
         </div>
         <div>
-          <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">AI Summary:</span>
-          <p id="modal-ai-summary" style="margin-top: 4px; font-size: 0.9rem; color: var(--text-main); line-height: 1.45;">-</p>
+          <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">AI
+            Summary:</span>
+          <p id="modal-ai-summary"
+            style="margin-top: 4px; font-size: 0.9rem; color: var(--text-main); line-height: 1.45;">-</p>
         </div>
         <div id="modal-ai-draft-container" style="position: relative; display: flex; flex-direction: column; gap: 4px;">
-          <span style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Suggested Response Draft (Arabic):</span>
+          <span
+            style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Suggested
+            Response Draft (Arabic):</span>
           <div style="display: flex; gap: 8px; align-items: stretch; margin-top: 4px;">
-            <div id="modal-ai-draft-text" style="flex: 1; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; font-size: 0.9rem; font-family: sans-serif; line-height: 1.4; color: var(--text-main); white-space: pre-wrap; min-height: 50px;">-</div>
-            <button class="btn btn-accent" onclick="copyAIDraft()" style="padding: 10px 15px; font-size: 0.85rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 4px;">📋 Copy</button>
+            <div id="modal-ai-draft-text"
+              style="flex: 1; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; font-size: 0.9rem; font-family: sans-serif; line-height: 1.4; color: var(--text-main); white-space: pre-wrap; min-height: 50px;">
+              -</div>
+            <button class="btn btn-accent" onclick="copyAIDraft()"
+              style="padding: 10px 15px; font-size: 0.85rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 4px;">📋
+              Copy</button>
           </div>
         </div>
       </div>
@@ -745,8 +798,9 @@
       <div class="timeline" id="modal-timeline">
         <!-- Message bubble timeline dynamic population -->
       </div>
-      
-      <div style="display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 10px; flex-wrap: wrap;">
+
+      <div
+        style="display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 10px; flex-wrap: wrap;">
         <div style="display: flex; gap: 8px; margin-left: auto;">
           <button id="modal-close-ticket-btn" class="btn btn-danger" onclick="closeTicketFromModal()">
             Resolve Complaint
@@ -774,7 +828,7 @@
         complaintsData = data.complaints || [];
         calculateMetrics();
         renderComplaintsTable();
-        
+
         // Refresh open modal if active
         if (activeDetailTicket) {
           const updatedTicket = complaintsData.find(t => t.ticketId === activeDetailTicket.ticketId);
@@ -865,7 +919,7 @@
       filtered.forEach(c => {
         const tr = document.createElement('tr');
         const openTime = new Date(c.openDate).toLocaleString();
-        
+
         let statusBadge = '';
         if (c.status === 'OPEN') {
           statusBadge = `<span class="badge-status badge-open">● Open</span>`;
@@ -874,7 +928,7 @@
         }
 
         let actionsHtml = `<button class="btn btn-accent" onclick="openComplaintLogs('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem;">💬 Audit Log</button>`;
-        
+
         if (c.status === 'OPEN') {
           actionsHtml += `<button class="btn btn-danger" onclick="closeComplaintTicket('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem;">Resolve</button>`;
         }
@@ -920,14 +974,14 @@
       activeDetailTicket = complaint;
       document.getElementById('modal-ticket-id').innerHTML = `MOH Complaint Tracker`;
       document.getElementById('modal-sender-info').innerHTML = `Sender: <b>${complaint.name || complaint.senderName}</b> (+${complaint.phone || complaint.senderPhone}) | Status: <b>${complaint.status}</b>`;
-      
+
       // Populate AI Insights
       document.getElementById('modal-ai-category').textContent = complaint.category || 'أخرى';
       document.getElementById('modal-ai-summary').textContent = complaint.summary || 'لم يتم توليد ملخص بعد.';
-      
+
       const draftTextEl = document.getElementById('modal-ai-draft-text');
       const draftContainerEl = document.getElementById('modal-ai-draft-container');
-      
+
       if (complaint.draftReply) {
         draftTextEl.textContent = complaint.draftReply;
         draftContainerEl.style.display = 'flex';
@@ -955,10 +1009,10 @@
         messages.forEach(msg => {
           const bubble = document.createElement('div');
           bubble.className = `timeline-bubble ${msg.fromMe ? 'bubble-outgoing' : 'bubble-incoming'}`;
-          
+
           const metaTime = new Date(msg.timestamp).toLocaleString();
           const senderLabel = msg.fromMe ? 'Clinic Reply' : 'MOH Agent';
-          
+
           let attachmentBadge = '';
           if (msg.hasAttachment) {
             attachmentBadge = `<span class="bubble-attachment-badge">📎 Attachment File</span>`;
@@ -1022,4 +1076,5 @@
     setInterval(fetchComplaints, 4000); // Poll complaints status live every 4 seconds!
   </script>
 </body>
+
 </html>

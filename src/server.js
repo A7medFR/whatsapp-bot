@@ -10,12 +10,12 @@
 require('dotenv').config();
 
 const express = require('express');
-const cors    = require('cors');
-const fs      = require('fs');
-const path    = require('path');
-const QRCode  = require('qrcode');
-const multer  = require('multer');
-const wa      = require('./whatsapp');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const QRCode = require('qrcode');
+const multer = require('multer');
+const wa = require('./whatsapp');
 const session = require('./session');
 const { buildGreeting, buildImageCaption, buildServicesText, buildCTA, buildAllOffersCTA } = require('./messageBuilder');
 
@@ -65,7 +65,7 @@ global.broadcastLog = (log) => {
   global.logListeners.forEach(listener => {
     try {
       listener(log);
-    } catch (_) {}
+    } catch (_) { }
   });
 };
 
@@ -749,10 +749,10 @@ app.get('/export-moh-numbers', async (_req, res) => {
   try {
     const list = await wa.getMOHNumbersFromLabels();
     const joined = list.join(',');
-    
+
     // Save to a file in the workspace
     fs.writeFileSync(path.resolve('./extracted_moh_numbers.txt'), joined, 'utf8');
-    
+
     res.json({
       success: true,
       count: list.length,
@@ -772,9 +772,9 @@ app.get('/export-moh-numbers', async (_req, res) => {
  */
 app.get('/labels', requireApiKey, (_req, res) => {
   const labels = wa.getLabels();
-  const list   = Object.entries(labels).map(([id, l]) => ({
+  const list = Object.entries(labels).map(([id, l]) => ({
     id,
-    name:  l.name,
+    name: l.name,
     color: l.color,
   }));
   res.json({ count: list.length, labels: list });
@@ -822,12 +822,12 @@ app.post('/api/complaints/:id/close', (req, res) => {
 app.post('/send-file', requireApiKey, upload.any(), async (req, res) => {
   console.log('--- [Railway Debug] Received /send-file request! ---');
   const { phone, caption, customText, branchTexts: branchTextsRaw, locationInfo: locationInfoRaw } = req.body;
-  const files        = req.files || [];
-  const branchTexts  = (() => { try { return JSON.parse(branchTextsRaw  || '[]'); } catch { return []; } })();
+  const files = req.files || [];
+  const branchTexts = (() => { try { return JSON.parse(branchTextsRaw || '[]'); } catch { return []; } })();
   const locationInfo = (() => { try { return JSON.parse(locationInfoRaw || '[]'); } catch { return []; } })();
-  const hasBranches  = Array.isArray(branchTexts)  && branchTexts.length  > 0;
+  const hasBranches = Array.isArray(branchTexts) && branchTexts.length > 0;
   const hasLocations = Array.isArray(locationInfo) && locationInfo.length > 0;
-  const hasCaption   = typeof caption    === 'string' && caption.trim().length    > 0;
+  const hasCaption = typeof caption === 'string' && caption.trim().length > 0;
   const hasCustomText = typeof customText === 'string' && customText.trim().length > 0;
 
   if (!phone || typeof phone !== 'string') {
@@ -861,7 +861,7 @@ app.post('/send-file', requireApiKey, upload.any(), async (req, res) => {
         const file = files[i];
         const fileName = Buffer.from(file.originalname, 'latin1').toString('utf8');
         const fileCaption = (i === 0) ? (caption || '') : '';
-        
+
         wa.logEvent(`📎 Queuing file send [${i + 1}/${files.length}]: ${fileName}...`, 'info');
         await wa.sendMessage(cleanPhone, {
           document: file.buffer,
@@ -924,8 +924,8 @@ app.post('/send-file', requireApiKey, upload.any(), async (req, res) => {
  */
 app.post('/send-offers', requireApiKey, async (req, res) => {
   const { phone, offers, isAllOffers, customText, branchTexts, locationInfo } = req.body;
-  const offerList    = Array.isArray(offers)       ? offers       : [];
-  const hasBranches  = Array.isArray(branchTexts)  && branchTexts.length  > 0;
+  const offerList = Array.isArray(offers) ? offers : [];
+  const hasBranches = Array.isArray(branchTexts) && branchTexts.length > 0;
   const hasLocations = Array.isArray(locationInfo) && locationInfo.length > 0;
   const hasCustomText = typeof customText === 'string' && customText.trim().length > 0;
 
@@ -961,7 +961,6 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
     // 1. Greeting
     if (offerList.length > 0 && !isAllOffers) {
       await wa.sendMessage(cleanPhone, { text: buildGreeting() });
-      await delay(1500);
     }
 
     // 2. Each offer
@@ -969,17 +968,14 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
       try {
         if (offer.image_url) {
           await wa.sendMessage(cleanPhone, {
-            image:   offer.image_url,
+            image: offer.image_url,
             caption: isAllOffers ? '' : buildImageCaption(offer),
           });
-          await delay(1000);
         } else if (isAllOffers) {
           await wa.sendMessage(cleanPhone, { text: `✨ *${offer.title}*` });
-          await delay(1000);
         }
         if (!isAllOffers) {
           await wa.sendMessage(cleanPhone, { text: buildServicesText(offer) });
-          await delay(1200);
         }
         results.push({ offerId: offer.id, title: offer.title, status: 'sent' });
       } catch (err) {
@@ -995,25 +991,21 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
       } else {
         await wa.sendMessage(cleanPhone, { text: buildCTA() });
       }
-      await delay(1000);
     }
 
     // 4. Custom text
     if (hasCustomText) {
       await wa.sendMessage(cleanPhone, { text: customText.trim() });
-      await delay(800);
     }
 
     // 5. Branch locations — native pins preferred, text links as fallback
     if (hasLocations) {
       for (const loc of locationInfo) {
         await wa.sendMessage(cleanPhone, { location: loc });
-        await delay(800);
       }
     } else if (hasBranches) {
       for (const bt of branchTexts) {
         await wa.sendMessage(cleanPhone, { text: bt });
-        await delay(800);
       }
     }
   } catch (err) {
@@ -1038,7 +1030,7 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
 
   const allFailed = results.length > 0 && results.every(r => r.status === 'failed');
   res.status(allFailed ? 500 : 200).json({
-    success:     !allFailed,
+    success: !allFailed,
     results,
     labelStatus,
   });
@@ -1089,7 +1081,7 @@ const handleShutdown = async (signal) => {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log(`\n🔌 Received ${signal}. Starting graceful shutdown...`);
-  
+
   // Close Express server first
   if (server) {
     server.close(() => {
@@ -1102,7 +1094,7 @@ const handleShutdown = async (signal) => {
   } catch (err) {
     console.error('Error during WhatsApp disconnect:', err);
   }
-  
+
   console.log('👋 Clean exit. Bye!');
   process.exit(0);
 };

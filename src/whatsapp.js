@@ -68,10 +68,11 @@ const LABELS_FILE    = path.resolve('./labels_cache.json');
 const CHAT_LABELS_FILE = path.resolve('./chat_labels_cache.json');
 
 // Anti-Ban & Queue configurations
-const MIN_QUEUE_DELAY = parseInt(process.env.MIN_QUEUE_DELAY_MS || '6000', 10);
-const MAX_QUEUE_DELAY = parseInt(process.env.MAX_QUEUE_DELAY_MS || '12000', 10);
-const BATCH_SIZE_LIMIT = parseInt(process.env.BATCH_SIZE_LIMIT || '10', 10);
-const BATCH_COOLDOWN = parseInt(process.env.BATCH_COOLDOWN_MS || '25000', 10);
+const MIN_QUEUE_DELAY = parseInt(process.env.MIN_QUEUE_DELAY_MS || '1500', 10);
+const MAX_QUEUE_DELAY = parseInt(process.env.MAX_QUEUE_DELAY_MS || '3000', 10);
+const SAME_CHAT_DELAY = parseInt(process.env.SAME_CHAT_DELAY_MS || '1500', 10);
+const BATCH_SIZE_LIMIT = parseInt(process.env.BATCH_SIZE_LIMIT || '20', 10);
+const BATCH_COOLDOWN = parseInt(process.env.BATCH_COOLDOWN_MS || '5000', 10);
 const SIMULATE_TYPING = process.env.SIMULATE_TYPING !== 'false';
 const SIMULATE_READ_RECEIPTS = process.env.SIMULATE_READ_RECEIPTS !== 'false';
 
@@ -690,6 +691,8 @@ async function connect() {
 const messageQueue = [];
 let isQueueProcessing = false;
 let messagesSentInCurrentBatch = 0;
+let lastSentTime = 0;
+let lastSentPhone = null;
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -707,15 +710,33 @@ async function processMessageQueue() {
 
     const task = messageQueue.shift();
     try {
-      // Dynamic jitter to space out queued messages
-      const jitterRange = MAX_QUEUE_DELAY - MIN_QUEUE_DELAY;
-      const jitter = Math.floor(Math.random() * (jitterRange > 0 ? jitterRange : 1000)) + MIN_QUEUE_DELAY;
-      logEvent(`⏳ Spacing out message to +${task.phone}... waiting ${jitter / 1000}s`, 'info');
-      await delay(jitter);
+      // Determine the spacing delay required
+      let requiredDelay = 0;
+      const now = Date.now();
+
+      if (lastSentTime > 0) {
+        if (lastSentPhone === task.phone) {
+          // Same chat spacing is shorter (natural flow)
+          requiredDelay = SAME_CHAT_DELAY;
+        } else {
+          // Different chat spacing uses standard queue anti-ban delays
+          const jitterRange = MAX_QUEUE_DELAY - MIN_QUEUE_DELAY;
+          requiredDelay = Math.floor(Math.random() * (jitterRange > 0 ? jitterRange : 1000)) + MIN_QUEUE_DELAY;
+        }
+      }
+
+      const timeSinceLastMessage = now - lastSentTime;
+      if (lastSentTime > 0 && timeSinceLastMessage < requiredDelay) {
+        const waitTime = requiredDelay - timeSinceLastMessage;
+        logEvent(`⏳ Spacing out message to +${task.phone}... waiting ${waitTime / 1000}s`, 'info');
+        await delay(waitTime);
+      }
 
       logEvent(`🚀 Sending queued block to +${task.phone}...`, 'info');
-      const res = await sendMessageDirect(task.phone, task.payload);
+      const res = await sendMessageDirect(task.phone, task.payload, (lastSentPhone === task.phone));
       
+      lastSentTime = Date.now();
+      lastSentPhone = task.phone;
       messagesSentInCurrentBatch++;
       logEvent(`✅ Message block sent to +${task.phone} successfully. (Batch progress: ${messagesSentInCurrentBatch}/${BATCH_SIZE_LIMIT})`, 'info');
       if (task.resolve) task.resolve(res);
@@ -739,16 +760,16 @@ async function sendMessage(phone, payload) {
   return enqueueMessage(phone, payload);
 }
 
-async function sendMessageDirect(phone, payload) {
+async function sendMessageDirect(phone, payload, isConsecutive = false) {
   if (!sock || !isReady) throw new Error('WhatsApp is not connected yet.');
   const jid = `${phone}@s.whatsapp.net`;
 
   // Simulating typing/composing presence update before sending to mimic human behavior
-  if (SIMULATE_TYPING) {
+  if (SIMULATE_TYPING && !isConsecutive) {
     try {
       await sock.sendPresenceUpdate('composing', jid);
-      // Simulate realistic typing time (e.g. 1.5 to 3.5 seconds)
-      const typingTime = Math.floor(Math.random() * 2000) + 1500;
+      // Simulate realistic typing time (e.g. 0.5 to 1.5 seconds)
+      const typingTime = Math.floor(Math.random() * 1000) + 500;
       logEvent(`💬 Simulating typing to +${phone} for ${typingTime / 1000}s...`, 'info');
       await delay(typingTime);
       await sock.sendPresenceUpdate('paused', jid);
