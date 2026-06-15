@@ -969,14 +969,12 @@ app.post('/send-offers', requireApiKey, async (req, res) => {
         if (offer.image_url) {
           await wa.sendMessage(cleanPhone, {
             image: offer.image_url,
-            caption: isAllOffers ? '' : buildImageCaption(offer),
+            caption: buildImageCaption(offer),
           });
-        } else if (isAllOffers) {
+        } else {
           await wa.sendMessage(cleanPhone, { text: `✨ *${offer.title}*` });
         }
-        if (!isAllOffers) {
-          await wa.sendMessage(cleanPhone, { text: buildServicesText(offer) });
-        }
+        await wa.sendMessage(cleanPhone, { text: buildServicesText(offer) });
         results.push({ offerId: offer.id, title: offer.title, status: 'sent' });
       } catch (err) {
         console.error(`Failed to send offer "${offer.title}":`, err.message);
