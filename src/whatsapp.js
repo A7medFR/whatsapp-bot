@@ -57,6 +57,35 @@ function formatJidNumber(phone) {
   return clean;
 }
 
+function resolveJid(phone) {
+  if (!phone) return '';
+  const clean = phone.replace(/\D/g, '');
+  if (phone.includes('@')) {
+    return phone;
+  }
+  
+  // 1. Look in chatLabels cache keys
+  for (const jid of Object.keys(chatLabels)) {
+    const jidPhone = jid.split('@')[0].replace(/\D/g, '');
+    if (jidPhone === clean) {
+      return jid;
+    }
+  }
+
+  // 2. Look in Baileys store messages keys
+  if (store && store.messages) {
+    for (const jid of Object.keys(store.messages)) {
+      const jidPhone = jid.split('@')[0].replace(/\D/g, '');
+      if (jidPhone === clean) {
+        return jid;
+      }
+    }
+  }
+
+  // 3. Default fallback
+  return `${clean}@s.whatsapp.net`;
+}
+
 const FORWARD_NUMBERS = (process.env.FORWARD_NUMBERS || '')
   .split(',').map(n => formatJidNumber(n)).filter(Boolean);
 
@@ -499,7 +528,7 @@ async function addLabelToChat(phone, labelName) {
     );
   }
 
-  const jid = `${phone}@s.whatsapp.net`;
+  const jid = resolveJid(phone);
   let targetJid = jid;
   try {
     const lid = await sock.signalRepository?.lidMapping?.getLIDForPN?.(jid);
@@ -565,6 +594,7 @@ async function connect() {
   // ── Track label-chat associations via label events ─────────────────────────
   sock.ev.on('labels.association', (data) => {
     const updates = Array.isArray(data) ? data : [data];
+    let changed = false;
     for (const u of updates) {
       const a = u?.association;
       const action = u?.type; // 'add' or 'remove'
@@ -574,11 +604,16 @@ async function connect() {
       if (action === 'add') {
         if (!chatLabels[a.chatId]) chatLabels[a.chatId] = new Set();
         chatLabels[a.chatId].add(labelIdStr);
+        changed = true;
         console.log(`🏷️ Label associated: Chat ${a.chatId} -> Label ID ${labelIdStr}`);
       } else if (action === 'remove') {
         chatLabels[a.chatId]?.delete(labelIdStr);
+        changed = true;
         console.log(`🏷️ Label disassociated: Chat ${a.chatId} -> Label ID ${labelIdStr}`);
       }
+    }
+    if (changed) {
+      saveChatLabelsCache();
     }
   });
 
@@ -603,7 +638,10 @@ async function connect() {
         }
       }
     }
-    if (found > 0) logEvent(`🏷️  Loaded ${found} label association(s) from chat sync.`, 'info');
+    if (found > 0) {
+      logEvent(`🏷️  Loaded ${found} label association(s) from chat sync.`, 'info');
+      saveChatLabelsCache();
+    }
   };
 
   sock.ev.on('chats.upsert',  (chats) => extractChatLabels(chats));
@@ -835,7 +873,7 @@ async function sendMessage(phone, payload) {
 
 async function sendMessageDirect(phone, payload, isConsecutive = false) {
   if (!sock || !isReady) throw new Error('WhatsApp is not connected yet.');
-  const jid = `${phone}@s.whatsapp.net`;
+  const jid = resolveJid(phone);
 
   // Simulating typing/composing presence update before sending to mimic human behavior
   if (SIMULATE_TYPING && !isConsecutive) {
@@ -919,7 +957,7 @@ async function getMOHNumbersFromLabels() {
 
   for (const [jid, labels] of Object.entries(chatLabels)) {
     if (labels && labels.has(mohLabelId)) {
-      let phone = jid.replace('@s.whatsapp.net', '');
+      let phone = jid.replace('@s.whatsapp.net', '').replace('@lid', '');
       
       // Try to resolve LID JIDs
       if (jid.endsWith('@lid')) {
@@ -932,7 +970,7 @@ async function getMOHNumbersFromLabels() {
       }
       
       const cleanPhone = phone.replace(/\D/g, '');
-      if (cleanPhone && !phone.includes('@lid')) {
+      if (cleanPhone) {
         phoneNumbers.add(cleanPhone);
       }
     }
@@ -943,7 +981,7 @@ async function getMOHNumbersFromLabels() {
 
 // ─── Get Chat History from Store ──────────────────────────────────────────────
 function getChatHistory(phone) {
-  const jid = `${phone}@s.whatsapp.net`;
+  const jid = resolveJid(phone);
   const rawMessages = store.messages[jid] ? Array.from(store.messages[jid]) : [];
   
   const storeHistory = rawMessages
@@ -1120,7 +1158,7 @@ async function scanAllMOHComplaints() {
   // From live Baileys store (messages received since last restart)
   if (store && store.messages) {
     for (const jid of Object.keys(store.messages)) {
-      if (jid.endsWith('@s.whatsapp.net')) {
+      if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) {
         const clean = jid.split('@')[0].replace(/\D/g, '');
         if (clean && !cachePhones.has(clean)) newPhones.add(clean);
       }
@@ -1205,7 +1243,7 @@ async function aiDeepScanMOHConversations() {
   // 4. Every phone that has messages in the live Baileys store
   if (store && store.messages) {
     for (const jid of Object.keys(store.messages)) {
-      if (jid.endsWith('@s.whatsapp.net')) {
+      if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) {
         const clean = jid.split('@')[0].replace(/\D/g, '');
         if (clean) allPhones.add(clean);
       }
@@ -1356,5 +1394,5 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels };
 
