@@ -84,8 +84,8 @@ app.get('/', async (_req, res) => {
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Lexend:wght@300;400;600;800&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-dark: #090d16;
-      --panel-bg: rgba(15, 23, 42, 0.6);
+      --bg-dark: #070a13;
+      --panel-bg: rgba(13, 20, 38, 0.45);
       --accent-cyan: #0891b2;
       --accent-cyan-glow: rgba(8, 145, 178, 0.15);
       --accent-emerald: #10b981;
@@ -95,9 +95,9 @@ app.get('/', async (_req, res) => {
       --accent-rose: #f43f5e;
       --accent-rose-glow: rgba(244, 63, 94, 0.15);
       --text-main: #f1f5f9;
-      --text-muted: #94a3b8;
-      --border-color: rgba(255, 255, 255, 0.08);
-      --terminal-bg: #030712;
+      --text-muted: #8e9bb3;
+      --border-color: rgba(255, 255, 255, 0.05);
+      --terminal-bg: #03050a;
       --font-headings: 'Lexend', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       --font-body: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
@@ -112,62 +112,141 @@ app.get('/', async (_req, res) => {
       font-family: var(--font-body);
       background-color: var(--bg-dark);
       background-image: 
-        radial-gradient(at 0% 0%, rgba(8, 145, 178, 0.1) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.07) 0px, transparent 50%);
+        radial-gradient(at 0% 0%, rgba(8, 145, 178, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.06) 0px, transparent 50%);
       background-attachment: fixed;
       color: var(--text-main);
       min-height: 100vh;
       display: flex;
-      flex-direction: column;
-      padding: 30px;
     }
-    
-    header {
+
+    .app-layout {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 25px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid var(--border-color);
+      width: 100%;
+      min-height: 100vh;
     }
-    
-    .logo-container {
+
+    .sidebar {
+      width: 280px;
+      background: rgba(8, 11, 22, 0.85);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      padding: 30px 20px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-brand {
       display: flex;
       align-items: center;
       gap: 12px;
+      margin-bottom: 40px;
+      padding: 0 10px;
     }
-    
+
     .logo-icon {
       color: var(--accent-cyan);
       display: flex;
       align-items: center;
       animation: pulse-icon 3s infinite ease-in-out;
     }
-    
+
     @keyframes pulse-icon {
       0%, 100% { transform: scale(1) rotate(0deg); }
-      50% { transform: scale(1.08) rotate(3deg); }
+      50% { transform: scale(1.05) rotate(3deg); }
     }
-    
-    .logo-text h1 {
+
+    .brand-text h1 {
       font-family: var(--font-headings);
-      font-size: 1.6rem;
+      font-size: 1.35rem;
       font-weight: 800;
       letter-spacing: -0.5px;
       background: linear-gradient(135deg, #06b6d4, #10b981);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    
-    .logo-text p {
-      font-size: 0.8rem;
+
+    .brand-text p {
+      font-size: 0.75rem;
       color: var(--text-muted);
-      letter-spacing: 1px;
+      letter-spacing: 1.5px;
       text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-family: var(--font-headings);
+      font-weight: 500;
+      font-size: 0.92rem;
+      transition: all 0.2s ease-in-out;
+      margin-bottom: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .nav-item:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.02);
+      border-color: rgba(255, 255, 255, 0.03);
+    }
+
+    .nav-item.active {
+      color: #22d3ee;
+      background: rgba(8, 145, 178, 0.08);
+      border-color: rgba(8, 145, 178, 0.2);
+    }
+
+    .sidebar-footer {
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .main-content {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    .main-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 20px;
+    }
+
+    .main-header h2 {
+      font-family: var(--font-headings);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .date-display {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-weight: 500;
     }
 
     .badge {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 8px;
       padding: 8px 16px;
@@ -177,24 +256,26 @@ app.get('/', async (_req, res) => {
       backdrop-filter: blur(12px);
       border: 1px solid currentColor;
       transition: all 0.3s ease;
+      width: 100%;
+      justify-content: center;
     }
 
     .badge-connected {
       color: #34d399;
-      background: rgba(52, 211, 153, 0.06);
-      box-shadow: 0 0 15px rgba(52, 211, 153, 0.15);
+      background: rgba(52, 211, 153, 0.04);
+      box-shadow: 0 0 15px rgba(52, 211, 153, 0.1);
     }
 
     .badge-disconnected {
       color: #f59e0b;
-      background: rgba(245, 158, 11, 0.06);
-      box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+      background: rgba(245, 158, 11, 0.04);
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.1);
     }
 
     .badge-connecting {
       color: #3b82f6;
-      background: rgba(59, 130, 246, 0.06);
-      box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
+      background: rgba(59, 130, 246, 0.04);
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
     }
 
     .dot {
@@ -214,10 +295,9 @@ app.get('/', async (_req, res) => {
       display: grid;
       grid-template-columns: 1fr;
       gap: 25px;
-      flex: 1;
     }
 
-    @media (min-width: 1024px) {
+    @media (min-width: 1200px) {
       .main-grid-split {
         grid-template-columns: 380px 1fr;
       }
@@ -225,28 +305,29 @@ app.get('/', async (_req, res) => {
 
     .card {
       background: var(--panel-bg);
-      backdrop-filter: blur(16px);
+      backdrop-filter: blur(24px);
       border: 1px solid var(--border-color);
       border-radius: 20px;
-      padding: 25px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      padding: 30px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
       display: flex;
       flex-direction: column;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
     
     .card:hover {
-      border-color: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
     }
 
     .card-title {
       font-family: var(--font-headings);
       font-size: 1.1rem;
       font-weight: 600;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       color: var(--text-main);
     }
 
@@ -262,8 +343,8 @@ app.get('/', async (_req, res) => {
     #qr-img {
       border: 8px solid #ffffff;
       border-radius: 16px;
-      width: 240px;
-      height: 240px;
+      width: 220px;
+      height: 220px;
       display: block;
       box-shadow: 0 10px 25px rgba(0,0,0,0.3);
       transition: opacity 0.3s;
@@ -277,7 +358,7 @@ app.get('/', async (_req, res) => {
       font-size: 0.85rem;
       color: var(--text-muted);
       line-height: 1.5;
-      margin-top: 15px;
+      margin-top: 20px;
       text-align: center;
     }
 
@@ -297,14 +378,14 @@ app.get('/', async (_req, res) => {
       flex-direction: column;
       flex: 1;
       height: 100%;
-      min-height: 450px;
+      min-height: 480px;
     }
 
     .console-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      margin-bottom: 15px;
     }
 
     .console-actions {
@@ -313,51 +394,51 @@ app.get('/', async (_req, res) => {
     }
 
     .btn {
-      background: rgba(255, 255, 255, 0.04);
+      background: rgba(255, 255, 255, 0.03);
       border: 1px solid var(--border-color);
       color: var(--text-main);
-      padding: 7px 15px;
+      padding: 8px 16px;
       border-radius: 8px;
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       font-weight: 500;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 6px;
-      transition: all 0.2s;
+      transition: all 0.2s ease-in-out;
     }
 
     .btn:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255,255,255,0.15);
+      background: rgba(255, 255, 255, 0.07);
+      border-color: rgba(255,255,255,0.12);
     }
 
     .btn-export {
-      background: rgba(8, 145, 178, 0.15);
-      border-color: rgba(8, 145, 178, 0.3);
+      background: rgba(8, 145, 178, 0.12);
+      border-color: rgba(8, 145, 178, 0.25);
       color: #22d3ee;
       font-weight: 600;
     }
 
     .btn-export:hover {
-      background: rgba(8, 145, 178, 0.25);
-      border-color: rgba(8, 145, 178, 0.45);
+      background: rgba(8, 145, 178, 0.22);
+      border-color: rgba(8, 145, 178, 0.4);
     }
 
     .terminal {
       background-color: var(--terminal-bg);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.03);
       border-radius: 12px;
       font-family: 'Fira Code', 'JetBrains Mono', monospace;
       font-size: 0.85rem;
-      padding: 16px;
+      padding: 18px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 8px;
-      box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
+      box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.4);
       flex: 1;
-      max-height: 550px;
+      max-height: 520px;
     }
 
     .log-line {
@@ -374,22 +455,22 @@ app.get('/', async (_req, res) => {
     }
 
     .log-time {
-      color: #64748b;
+      color: #525f7a;
       font-weight: 500;
       flex-shrink: 0;
       user-select: none;
     }
 
     .log-content {
-      color: #e2e8f0;
+      color: #cbd5e1;
     }
 
     .log-info { color: #f1f5f9; }
-    .log-warn { color: #f59e0b; }
-    .log-error { color: #ef4444; }
+    .log-warn { color: #fbbf24; }
+    .log-error { color: #f87171; }
 
     .system-log {
-      color: #60a5fa;
+      color: #38bdf8;
       font-style: italic;
     }
 
@@ -399,17 +480,17 @@ app.get('/', async (_req, res) => {
     }
     
     .terminal::-webkit-scrollbar-track {
-      background: rgba(0, 0, 0, 0.2);
+      background: rgba(0, 0, 0, 0.1);
       border-radius: 4px;
     }
     
     .terminal::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.08);
       border-radius: 4px;
     }
     
     .terminal::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.15);
     }
 
     .copy-toast {
@@ -423,124 +504,170 @@ app.get('/', async (_req, res) => {
       border-radius: 12px;
       font-size: 0.9rem;
       font-weight: 600;
-      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35);
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
       transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      z-index: 100;
+      z-index: 1000;
     }
 
     .copy-toast.show {
       transform: translateX(-50%) translateY(0);
     }
+
+    @media (max-width: 1024px) {
+      .app-layout {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 20px;
+      }
+      .sidebar-brand {
+        margin-bottom: 20px;
+      }
+      .sidebar-nav {
+        flex-direction: row;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+      .nav-item {
+        margin-bottom: 0;
+        font-size: 0.85rem;
+        padding: 8px 12px;
+      }
+      .main-content {
+        padding: 20px;
+      }
+    }
   </style>
 </head>
 <body>
 
-  <header>
-    <div class="logo-container">
-      <div class="logo-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+  <div class="app-layout">
+    <!-- Left Sidebar Panel -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        </div>
+        <div class="brand-text">
+          <h1>Patrix Medical</h1>
+          <p>Core Platform</p>
+        </div>
       </div>
-      <div class="logo-text">
-        <h1>Patrix Medical</h1>
-        <p>WhatsApp Core Console</p>
-      </div>
-    </div>
 
-    <div style="display: flex; gap: 15px; align-items: center;">
-      <button onclick="window.location.href='/kpi'" style="background: rgba(8, 145, 178, 0.12); border: 1px solid rgba(8, 145, 178, 0.3); color: #22d3ee; padding: 8px 16px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; backdrop-filter: blur(12px); font-family: inherit; transition: all 0.3s ease; display: inline-flex; align-items: center;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        Agent KPI Dashboard
-      </button>
-      <button onclick="window.location.href='/complaints'" style="background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.3); color: #fca5a5; padding: 8px 16px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; backdrop-filter: blur(12px); font-family: inherit; transition: all 0.3s ease; display: inline-flex; align-items: center;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        MOH Complaints
-      </button>
-      <div id="connection-status" class="badge">
-        <div class="dot"></div>
-        <span id="status-text">Checking Status...</span>
-      </div>
-    </div>
-  </header>
+      <nav class="sidebar-nav">
+        <a href="/" class="nav-item active">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+          System Console
+        </a>
+        <a href="/complaints" class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          MOH Complaints
+        </a>
+        <a href="/kpi" class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          KPI Dashboard
+        </a>
+      </nav>
 
-  <div id="main-grid-element" class="main-grid">
-    <!-- QR Card (Rendered dynamic) -->
-    <div id="qr-card" class="card" style="display: none;">
-      <h3 class="card-title">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; color: var(--accent-cyan);"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-        Scan QR Code
-      </h3>
-      <div class="qr-container">
-        <img id="qr-img" src="" alt="Scan QR" />
-        <div class="instructions">
-          <p>Link this phone to WhatsApp Business:</p>
-          <ol>
-            <li>Open WhatsApp Business on clinic device</li>
-            <li>Tap <b>Menu (⋮)</b> or <b>Settings</b></li>
-            <li>Select <b>Linked Devices</b> → <b>Link a Device</b></li>
-          </ol>
+      <div class="sidebar-footer">
+        <div id="connection-status" class="badge">
+          <div class="dot"></div>
+          <span id="status-text">Checking Status...</span>
         </div>
       </div>
-    </div>
+    </aside>
 
-    <!-- Active Connected Info Card (Rendered dynamic) -->
-    <div id="info-card" class="card" style="display: none;">
-      <h3 class="card-title">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; color: var(--accent-cyan);"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        Core Controller
-      </h3>
-      <div style="display:flex; flex-direction:column; gap: 18px; flex:1; justify-content:center;">
-        <div>
-          <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">ENVIRONMENT STATUS</h4>
-          <p style="font-weight:700; color:#34d399; font-size:1.05rem;">Active & Connected ✓</p>
-        </div>
-        <div>
-          <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">ACTIVE SESSION BACKUP</h4>
-          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
-            Export your WhatsApp token session directly to keep it persistently authenticated in Railway / Back4App / cloud hosting.
-          </p>
-          <button class="btn btn-export" onclick="exportSession()" style="width:100%; justify-content:center; padding:10px; margin-bottom:12px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export Session Base64
-          </button>
-        </div>
-        <div>
-          <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">MOH NUMBERS EXTRACTION</h4>
-          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
-            Extract all phone numbers currently labeled as "وزارة الصحة" on your phone to add them to your Railway variables.
-          </p>
-          <button class="btn btn-export" onclick="exportMOHNumbers()" style="width:100%; justify-content:center; padding:10px; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #a7f3d0;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-            Extract MOH Numbers
-          </button>
-        </div>
+    <!-- Main Dashboard Area -->
+    <main class="main-content">
+      <div class="main-header">
+        <h2>WhatsApp Core Console</h2>
+        <span class="date-display" id="header-date">Platform Diagnostics</span>
       </div>
-    </div>
 
-    <!-- System Terminal Card -->
-    <div class="card console-card">
-      <div class="console-header">
-        <h3 class="card-title" style="margin-bottom:0;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; color: var(--accent-cyan);"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-          Core Diagnostics Stream
-        </h3>
-        <div class="console-actions">
-          <button class="btn" onclick="clearConsole()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-            Clear Screen
-          </button>
-          <button class="btn" onclick="downloadLogs()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Download Logs
-          </button>
+      <div id="main-grid-element" class="main-grid">
+        <!-- QR Card (Rendered dynamic) -->
+        <div id="qr-card" class="card" style="display: none;">
+          <h3 class="card-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+            Link Device
+          </h3>
+          <div class="qr-container">
+            <img id="qr-img" src="" alt="Scan QR" />
+            <div class="instructions">
+              <p>Link this phone to WhatsApp Business:</p>
+              <ol>
+                <li>Open WhatsApp Business on clinic device</li>
+                <li>Tap <b>Menu (⋮)</b> or <b>Settings</b></li>
+                <li>Select <b>Linked Devices</b> → <b>Link a Device</b></li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Connected Info Card (Rendered dynamic) -->
+        <div id="info-card" class="card" style="display: none;">
+          <h3 class="card-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Core Controller
+          </h3>
+          <div style="display:flex; flex-direction:column; gap: 18px; flex:1; justify-content:center;">
+            <div>
+              <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">ENVIRONMENT STATUS</h4>
+              <p style="font-weight:700; color:#34d399; font-size:1.05rem;">Active & Connected ✓</p>
+            </div>
+            <div>
+              <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">ACTIVE SESSION BACKUP</h4>
+              <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
+                Export your WhatsApp token session directly to keep it persistently authenticated in Railway / Back4App / cloud hosting.
+              </p>
+              <button class="btn btn-export" onclick="exportSession()" style="width:100%; justify-content:center; padding:10px; margin-bottom:12px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export Session Base64
+              </button>
+            </div>
+            <div>
+              <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">MOH NUMBERS EXTRACTION</h4>
+              <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
+                Extract all phone numbers currently labeled as "وزارة الصحة" on your phone to add them to your Railway variables.
+              </p>
+              <button class="btn btn-export" onclick="exportMOHNumbers()" style="width:100%; justify-content:center; padding:10px; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #a7f3d0;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                Extract MOH Numbers
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Terminal Card -->
+        <div class="card console-card">
+          <div class="console-header">
+            <h3 class="card-title" style="margin-bottom:0;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              Core Diagnostics Stream
+            </h3>
+            <div class="console-actions">
+              <button class="btn" onclick="clearConsole()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                Clear Screen
+              </button>
+              <button class="btn" onclick="downloadLogs()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download Logs
+              </button>
+            </div>
+          </div>
+          <div class="terminal" id="terminal-screen">
+            <div class="log-line system-log">
+              <span class="log-time">[SYSTEM]</span>
+              <span class="log-content">Connecting to diagnostics log stream...</span>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="terminal" id="terminal-screen">
-        <div class="log-line system-log">
-          <span class="log-time">[SYSTEM]</span>
-          <span class="log-content">Connecting to diagnostics log stream...</span>
-        </div>
-      </div>
-    </div>
+    </main>
   </div>
 
   <div id="toast" class="copy-toast">Copied to clipboard!</div>
@@ -557,6 +684,10 @@ app.get('/', async (_req, res) => {
 
     let currentStatus = null;
     let eventSource = null;
+
+    // Set active date
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    document.getElementById('header-date').textContent = new Date().toLocaleDateString('en-US', options);
 
     function addLogLine(time, message, level = 'info') {
       const line = document.createElement('div');

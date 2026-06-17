@@ -4,17 +4,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AlHayat Clinic — Call Center Agent KPI Dashboard</title>
+  <title>Patrix Medical — Call Center KPI Engine</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Lexend:wght@300;400;600;800&family=Source+Sans+3:wght@300;400;600;700&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Lexend:wght@300;400;600;800&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --bg-dark: #090d16;
-      --panel-bg: rgba(15, 23, 42, 0.6);
+      --bg-dark: #070a13;
+      --panel-bg: rgba(13, 20, 38, 0.45);
       --accent-cyan: #0891b2;
       --accent-cyan-glow: rgba(8, 145, 178, 0.15);
       --accent-emerald: #10b981;
@@ -31,9 +29,8 @@
       --accent-red: var(--accent-rose);
       
       --text-main: #f1f5f9;
-      --text-muted: #94a3b8;
-      --border-color: rgba(255, 255, 255, 0.08);
-      --card-bg-gradient: linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.7) 100%);
+      --text-muted: #8e9bb3;
+      --border-color: rgba(255, 255, 255, 0.05);
       --font-headings: 'Lexend', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       --font-body: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
@@ -44,84 +41,201 @@
       padding: 0;
     }
 
+    body {
+      font-family: var(--font-body);
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(8, 145, 178, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.06) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+    }
+
     h1, h2, h3, h4, h5, h6 {
       font-family: var(--font-headings) !important;
+    }
+
+    .app-layout {
+      display: flex;
+      width: 100%;
+      min-height: 100vh;
+    }
+
+    /* Left Sidebar */
+    .sidebar {
+      width: 280px;
+      background: rgba(8, 11, 22, 0.85);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      padding: 30px 20px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 40px;
+      padding: 0 10px;
+    }
+
+    .logo-icon {
+      color: #3b82f6;
+      display: flex;
+      align-items: center;
+      animation: pulse-icon 3s infinite ease-in-out;
+    }
+
+    @keyframes pulse-icon {
+      0%, 100% { transform: scale(1) rotate(0deg); }
+      50% { transform: scale(1.05) rotate(3deg); }
+    }
+
+    .brand-text h1 {
+      font-family: var(--font-headings);
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #06b6d4, #10b981);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-family: var(--font-headings);
+      font-weight: 500;
+      font-size: 0.92rem;
+      transition: all 0.2s ease-in-out;
+      margin-bottom: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .nav-item:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.02);
+      border-color: rgba(255, 255, 255, 0.03);
+    }
+
+    .nav-item.active {
+      color: #22d3ee;
+      background: rgba(8, 145, 178, 0.08);
+      border-color: rgba(8, 145, 178, 0.2);
+    }
+
+    .sidebar-footer {
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      backdrop-filter: blur(12px);
+      border: 1px solid currentColor;
+      transition: all 0.3s ease;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .badge-connected {
+      color: #34d399;
+      background: rgba(52, 211, 153, 0.04);
+      box-shadow: 0 0 15px rgba(52, 211, 153, 0.1);
+    }
+
+    .badge-disconnected {
+      color: #f59e0b;
+      background: rgba(245, 158, 11, 0.04);
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.1);
+    }
+
+    .badge-connecting {
+      color: #3b82f6;
+      background: rgba(59, 130, 246, 0.04);
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: currentColor;
+      animation: pulse-dot 1.5s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Main Area */
+    .main-content {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    .main-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 20px;
+    }
+
+    .main-header h2 {
+      font-family: var(--font-headings);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .date-display {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-weight: 500;
     }
 
     /* Transition & cursor overrides */
     .btn, .tab-btn, .upload-card, .metric-card, select, input {
       transition: all 0.2s ease-in-out !important;
-      cursor: pointer;
     }
     .btn:hover, .tab-btn:hover {
-      transform: none !important; /* Eliminate layout shifting scales */
-    }
-
-    body {
-      font-family: var(--font-body);
-      background-color: var(--bg-dark);
-      background-image:
-        radial-gradient(at 0% 0%, rgba(8, 145, 178, 0.1) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.07) 0px, transparent 50%);
-      background-attachment: fixed;
-      color: var(--text-main);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      padding: 30px;
-    }
-
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 25px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .logo-container {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .logo-icon {
-      font-size: 2.2rem;
-      animation: pulse-icon 3s infinite ease-in-out;
-    }
-
-    @keyframes pulse-icon {
-
-      0%,
-      100% {
-        transform: scale(1) rotate(0deg);
-      }
-
-      50% {
-        transform: scale(1.05) rotate(3deg);
-      }
-    }
-
-    .logo-text h1 {
-      font-size: 1.6rem;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #60a5fa, #34d399);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .logo-text p {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
-
-    .nav-actions {
-      display: flex;
-      gap: 12px;
+      transform: none !important;
     }
 
     .btn {
@@ -142,30 +256,30 @@
     .btn:hover {
       background: rgba(255, 255, 255, 0.08);
       border-color: rgba(255, 255, 255, 0.15);
-      transform: translateY(-1px);
     }
 
     .btn-primary {
-      background: rgba(16, 185, 129, 0.15);
-      border-color: rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.25);
       color: #a7f3d0;
       font-weight: 600;
     }
 
     .btn-primary:hover {
-      background: rgba(16, 185, 129, 0.25);
-      border-color: rgba(16, 185, 129, 0.45);
+      background: rgba(16, 185, 129, 0.22);
+      border-color: rgba(16, 185, 129, 0.4);
     }
 
     .btn-accent {
-      background: rgba(59, 130, 246, 0.15);
-      border-color: rgba(59, 130, 246, 0.3);
-      color: #93c5fd;
+      background: rgba(8, 145, 178, 0.12);
+      border-color: rgba(8, 145, 178, 0.25);
+      color: #22d3ee;
       font-weight: 600;
     }
 
     .btn-accent:hover {
-      background: rgba(59, 130, 246, 0.25);
+      background: rgba(8, 145, 178, 0.22);
+      border-color: rgba(8, 145, 178, 0.4);
     }
 
     /* Layout Grid */
@@ -184,25 +298,24 @@
 
     .panel {
       background: var(--panel-bg);
-      backdrop-filter: blur(16px);
+      backdrop-filter: blur(24px);
       border: 1px solid var(--border-color);
       border-radius: 20px;
       padding: 25px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
       display: flex;
       flex-direction: column;
       height: fit-content;
     }
 
     .panel-title {
-      font-size: 1.25rem;
+      font-size: 1.1rem;
       font-weight: 600;
       margin-bottom: 20px;
       display: flex;
       align-items: center;
       gap: 10px;
       color: var(--text-main);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       padding-bottom: 10px;
     }
 
@@ -215,24 +328,24 @@
     }
 
     .upload-card {
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px dashed rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.01);
+      border: 1px dashed rgba(255, 255, 255, 0.1);
       border-radius: 12px;
       padding: 15px;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      transition: all 0.3s;
+      transition: all 0.2s ease-in-out;
       position: relative;
     }
 
     .upload-card:hover {
-      border-color: var(--accent-blue);
-      background: rgba(59, 130, 246, 0.02);
+      border-color: var(--accent-cyan);
+      background: rgba(8, 145, 178, 0.02);
     }
 
     .upload-card.loaded {
-      border-color: var(--accent-green);
+      border-color: var(--accent-emerald);
       background: rgba(16, 185, 129, 0.02);
     }
 
@@ -256,12 +369,12 @@
     }
 
     .status-empty {
-      background: rgba(245, 158, 11, 0.15);
+      background: rgba(245, 158, 11, 0.12);
       color: var(--accent-yellow);
     }
 
     .status-loaded {
-      background: rgba(16, 185, 129, 0.15);
+      background: rgba(16, 185, 129, 0.12);
       color: var(--accent-green);
     }
 
@@ -276,7 +389,7 @@
     }
 
     .upload-btn-label {
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.04);
       border: 1px solid var(--border-color);
       color: var(--text-main);
       padding: 6px 12px;
@@ -289,7 +402,7 @@
     }
 
     .upload-btn-label:hover {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.08);
     }
 
     .file-name-display {
@@ -310,20 +423,21 @@
     }
 
     .metric-card {
-      background: var(--card-bg-gradient);
+      background: var(--panel-bg);
+      backdrop-filter: blur(24px);
       border: 1px solid var(--border-color);
-      border-radius: 16px;
+      border-radius: 20px;
       padding: 20px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      transition: all 0.3s;
+      transition: all 0.2s ease-in-out;
     }
 
     .metric-card:hover {
-      transform: translateY(-2px);
-      border-color: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
     }
 
     .metric-title {
@@ -348,28 +462,17 @@
       margin-top: 6px;
     }
 
-    .green-text {
-      color: var(--accent-green) !important;
-    }
-
-    .blue-text {
-      color: var(--accent-blue) !important;
-    }
-
-    .yellow-text {
-      color: var(--accent-yellow) !important;
-    }
-
-    .red-text {
-      color: var(--accent-red) !important;
-    }
+    .green-text { color: var(--accent-emerald) !important; }
+    .blue-text { color: var(--accent-cyan) !important; }
+    .yellow-text { color: var(--accent-amber) !important; }
+    .red-text { color: var(--accent-rose) !important; }
 
     /* Tab System */
     .tab-container {
-      background: rgba(15, 23, 42, 0.4);
+      background: rgba(15, 23, 42, 0.2);
       border: 1px solid var(--border-color);
       border-radius: 16px;
-      padding: 10px;
+      padding: 8px;
       display: flex;
       gap: 10px;
       margin-bottom: 25px;
@@ -384,18 +487,22 @@
       font-weight: 600;
       border-radius: 10px;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       transition: all 0.2s;
     }
 
     .tab-btn:hover {
       color: var(--text-main);
-      background: rgba(255, 255, 255, 0.03);
+      background: rgba(255, 255, 255, 0.02);
     }
 
     .tab-btn.active {
-      color: #3b82f6;
-      background: rgba(59, 130, 246, 0.15);
-      box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+      color: #22d3ee;
+      background: rgba(8, 145, 178, 0.08);
+      border-color: rgba(8, 145, 178, 0.2);
+      box-shadow: 0 0 15px rgba(8, 145, 178, 0.1);
     }
 
     .tab-content {
@@ -408,25 +515,20 @@
     }
 
     @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(5px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     /* Main Report Panel */
     .report-panel {
       background: var(--panel-bg);
-      backdrop-filter: blur(16px);
+      backdrop-filter: blur(24px);
       border: 1px solid var(--border-color);
       border-radius: 20px;
-      padding: 25px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      padding: 30px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
     }
 
     /* Table styling */
@@ -435,6 +537,7 @@
       margin-top: 15px;
       border-radius: 12px;
       border: 1px solid var(--border-color);
+      background: rgba(3, 7, 18, 0.2);
     }
 
     table {
@@ -445,7 +548,7 @@
     }
 
     th {
-      background: rgba(15, 23, 42, 0.9);
+      background: rgba(13, 20, 38, 0.8);
       color: var(--text-muted);
       font-weight: 600;
       padding: 14px 18px;
@@ -454,16 +557,15 @@
       font-size: 0.75rem;
       letter-spacing: 0.5px;
     }
-    }
 
     td {
       padding: 14px 18px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
       color: var(--text-main);
     }
 
     tr:hover td {
-      background: rgba(255, 255, 255, 0.02);
+      background: rgba(255, 255, 255, 0.015);
     }
 
     .grade-badge {
@@ -477,27 +579,27 @@
     }
 
     .grade-excellent {
-      background: rgba(16, 185, 129, 0.15);
+      background: rgba(16, 185, 129, 0.12);
       color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      border: 1px solid rgba(16, 185, 129, 0.2);
     }
 
     .grade-good {
-      background: rgba(59, 130, 246, 0.15);
+      background: rgba(59, 130, 246, 0.12);
       color: #60a5fa;
-      border: 1px solid rgba(59, 130, 246, 0.3);
+      border: 1px solid rgba(59, 130, 246, 0.2);
     }
 
     .grade-fair {
-      background: rgba(245, 158, 11, 0.15);
+      background: rgba(245, 158, 11, 0.12);
       color: #fbbf24;
-      border: 1px solid rgba(245, 158, 11, 0.3);
+      border: 1px solid rgba(245, 158, 11, 0.2);
     }
 
     .grade-poor {
-      background: rgba(239, 68, 68, 0.15);
+      background: rgba(239, 68, 68, 0.12);
       color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.3);
+      border: 1px solid rgba(239, 68, 68, 0.2);
     }
 
     /* Search and Filter Controls */
@@ -524,8 +626,9 @@
     }
 
     .search-input:focus {
-      border-color: var(--accent-blue);
+      border-color: var(--accent-cyan);
       background: rgba(255, 255, 255, 0.06);
+      box-shadow: var(--accent-cyan-glow);
     }
 
     /* Charts Layout */
@@ -543,7 +646,7 @@
     }
 
     .chart-container {
-      background: rgba(255, 255, 255, 0.02);
+      background: rgba(255, 255, 255, 0.01);
       border: 1px solid var(--border-color);
       border-radius: 16px;
       padding: 20px;
@@ -566,15 +669,15 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(3, 7, 18, 0.8);
-      backdrop-filter: blur(8px);
+      background: rgba(3, 5, 10, 0.8);
+      backdrop-filter: blur(12px);
       z-index: 100;
       display: flex;
       justify-content: center;
       align-items: center;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.3s;
+      transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .overlay.show {
@@ -583,7 +686,7 @@
     }
 
     .modal {
-      background: var(--bg-dark);
+      background: #090d16;
       border: 1px solid var(--border-color);
       border-radius: 24px;
       width: 90%;
@@ -596,8 +699,8 @@
       flex-direction: column;
       gap: 20px;
       transform: translateY(20px);
-      transition: transform 0.3s;
-      background-image: radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 40%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      background-image: radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.03) 0px, transparent 40%);
     }
 
     .overlay.show .modal {
@@ -742,231 +845,285 @@
       font-size: 0.75rem;
       outline: none;
     }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      body {
+        flex-direction: column;
+      }
+      .app-layout {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 20px;
+      }
+      .sidebar-brand {
+        margin-bottom: 20px;
+      }
+      .sidebar-nav {
+        flex-direction: row;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+      .nav-item {
+        margin-bottom: 0;
+        font-size: 0.85rem;
+        padding: 8px 12px;
+      }
+      .main-content {
+        padding: 20px;
+      }
+    }
   </style>
 </head>
 
 <body>
 
-  <header>
-    <div class="logo-container">
-      <div class="logo-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      </div>
-      <div class="logo-text">
-        <h1>AlHayat Clinic</h1>
-        <p>Call Center KPI Engine</p>
-      </div>
-    </div>
-
-    <div class="nav-actions">
-      <button class="btn btn-accent" onclick="loadSampleData()">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        Load Demo Data
-      </button>
-      <button class="btn" onclick="window.location.href='/'">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-        WhatsApp Console
-      </button>
-    </div>
-  </header>
-
-  <div class="dashboard-container">
-
-    <!-- Left Configuration Panel -->
-    <div class="panel">
-      <h3 class="panel-title">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; color: var(--accent-cyan);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Upload Data Sheets
-      </h3>
-
-      <div class="upload-list">
-
-        <!-- Call Details Sheet -->
-        <div id="card-call_details" class="upload-card">
-          <div class="upload-card-header">
-            <span class="upload-card-title">1. Call Details log</span>
-            <span id="badge-call_details" class="upload-status-badge status-empty">Empty</span>
-          </div>
-          <div class="file-input-wrapper">
-            <label class="upload-btn-label" for="file-call_details">Choose File</label>
-            <input type="file" id="file-call_details" accept=".csv" onchange="handleFileSelect('call_details')">
-            <span id="name-call_details" class="file-name-display">No file selected</span>
-          </div>
+  <div class="app-layout">
+    <!-- Left Sidebar Panel -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         </div>
-
-        <!-- Activities Sheet -->
-        <div id="card-activities" class="upload-card">
-          <div class="upload-card-header">
-            <span class="upload-card-title">2. Bitrix Activities</span>
-            <span id="badge-activities" class="upload-status-badge status-empty">Empty</span>
-          </div>
-          <div class="file-input-wrapper">
-            <label class="upload-btn-label" for="file-activities">Choose File</label>
-            <input type="file" id="file-activities" accept=".csv" onchange="handleFileSelect('activities')">
-            <span id="name-activities" class="file-name-display">No file selected</span>
-          </div>
-        </div>
-
-        <!-- Breaks Sheet -->
-        <div id="card-reports_break" class="upload-card">
-          <div class="upload-card-header">
-            <span class="upload-card-title">3. Reports Break</span>
-            <span id="badge-reports_break" class="upload-status-badge status-empty">Empty</span>
-          </div>
-          <div class="file-input-wrapper">
-            <label class="upload-btn-label" for="file-reports_break">Choose File</label>
-            <input type="file" id="file-reports_break" accept=".csv" onchange="handleFileSelect('reports_break')">
-            <span id="name-reports_break" class="file-name-display">No file selected</span>
-          </div>
-        </div>
-
-        <!-- QA Records Sheet -->
-        <div id="card-qa_records" class="upload-card">
-          <div class="upload-card-header">
-            <span class="upload-card-title">4. Quality Assurance</span>
-            <span id="badge-qa_records" class="upload-status-badge status-empty">Empty</span>
-          </div>
-          <div class="file-input-wrapper">
-            <label class="upload-btn-label" for="file-qa_records">Choose File</label>
-            <input type="file" id="file-qa_records" accept=".csv" onchange="handleFileSelect('qa_records')">
-            <span id="name-qa_records" class="file-name-display">No file selected</span>
-          </div>
-        </div>
-
-        <!-- Mapping Users Sheet (Optional) -->
-        <div id="card-mapping_users" class="upload-card loaded">
-          <div class="upload-card-header">
-            <span class="upload-card-title">5. Agent Map (Optional)</span>
-            <span id="badge-mapping_users" class="upload-status-badge status-loaded">Using Preloaded</span>
-          </div>
-          <div class="file-input-wrapper">
-            <label class="upload-btn-label" for="file-mapping_users">Replace Map</label>
-            <input type="file" id="file-mapping_users" accept=".csv" onchange="handleFileSelect('mapping_users')">
-            <span id="name-mapping_users" class="file-name-display">Preloaded default mapping</span>
-          </div>
-        </div>
-
-      </div>
-
-      <button class="btn btn-primary" onclick="calculateKPIs()"
-        style="justify-content:center; padding:12px; font-size:0.95rem;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        Calculate KPIs
-      </button>
-    </div>
-
-    <!-- Right Dashboard Panel -->
-    <div class="report-panel">
-
-      <!-- Summary KPI metrics cards -->
-      <div class="summary-grid">
-        <div class="metric-card">
-          <span class="metric-title">Total Calls</span>
-          <span id="lbl-total-calls" class="metric-value">—</span>
-          <span id="lbl-calls-detail" class="metric-subtext">No data processed</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-title">Answer Rate</span>
-          <span id="lbl-answer-rate" class="metric-value">—</span>
-          <span id="lbl-rate-detail" class="metric-subtext">No data processed</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-title">Avg Handle Time</span>
-          <span id="lbl-avg-aht" class="metric-value">—</span>
-          <span id="lbl-aht-detail" class="metric-subtext">No data processed</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-title">Avg QC Score</span>
-          <span id="lbl-avg-qc" class="metric-value">—</span>
-          <span id="lbl-qc-detail" class="metric-subtext">No data processed</span>
-        </div>
-        <div class="metric-card">
-          <span class="metric-title">Top Agent</span>
-          <span id="lbl-top-agent" class="metric-value"
-            style="font-size:1.35rem; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
-          <span id="lbl-top-score" class="metric-subtext">No data processed</span>
+        <div class="brand-text">
+          <h1>Patrix Medical</h1>
+          <p>Core Platform</p>
         </div>
       </div>
 
-      <!-- Interactive Navigation Tabs -->
-      <div class="tab-container">
-        <button id="tab-btn-overview" class="tab-btn active" onclick="switchTab('overview')">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-          Analytics Overview
-        </button>
-        <button id="tab-btn-standings" class="tab-btn" onclick="switchTab('standings')">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34"/><path d="M12 2a5 5 0 0 0-5 5v3.66a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z"/></svg>
-          Agent Leaderboard
-        </button>
+      <nav class="sidebar-nav">
+        <a href="/" class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+          System Console
+        </a>
+        <a href="/complaints" class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          MOH Complaints
+        </a>
+        <a href="/kpi" class="nav-item active">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          KPI Dashboard
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div id="connection-status" class="badge badge-connecting">
+          <div class="dot"></div>
+          <span id="status-text">Checking Status...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Dashboard Area -->
+    <main class="main-content">
+      <div class="main-header">
+        <h2>Call Center KPI Engine</h2>
+        <div class="nav-actions" style="display: flex; gap: 12px; align-items: center;">
+          <span class="date-display" id="header-date" style="margin-right: 15px;">KPI Platform</span>
+          <button class="btn btn-accent" onclick="loadSampleData()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Load Demo Data
+          </button>
+        </div>
       </div>
 
-      <!-- Column Mapper Debug Alert -->
-      <div id="mapping-alert-box" class="mapping-box">
-        <div class="mapping-title">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; color: var(--accent-amber);"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-          Custom Column Mapping Needed
-        </div>
-        <p style="font-size:0.78rem; color:var(--text-muted);">Some fields did not automatically match our heuristics.
-          Choose correct columns:</p>
-        <div class="mapping-fields-grid" id="mapping-selectors-container">
-          <!-- Populated dynamic -->
-        </div>
-        <button class="btn btn-accent" onclick="recalculateAfterMap()"
-          style="padding: 4px 10px; font-size:0.75rem; align-self: flex-start; margin-top:5px;">Apply Map</button>
-      </div>
+      <div class="dashboard-container">
 
-      <!-- Content: Overview Analytics -->
-      <div id="tab-overview" class="tab-content active">
-        <div class="charts-row">
-          <div class="chart-container">
-            <span class="chart-title">Agent Combined Scores (%)</span>
-            <canvas id="chart-scores" style="flex:1; width:100%; max-height:280px;"></canvas>
+        <!-- Left Configuration Panel -->
+        <div class="panel">
+          <h3 class="panel-title" style="display: flex; align-items: center; gap: 8px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Upload Data Sheets
+          </h3>
+
+          <div class="upload-list">
+
+            <!-- Call Details Sheet -->
+            <div id="card-call_details" class="upload-card">
+              <div class="upload-card-header">
+                <span class="upload-card-title">1. Call Details log</span>
+                <span id="badge-call_details" class="upload-status-badge status-empty">Empty</span>
+              </div>
+              <div class="file-input-wrapper">
+                <label class="upload-btn-label" for="file-call_details">Choose File</label>
+                <input type="file" id="file-call_details" accept=".csv" onchange="handleFileSelect('call_details')">
+                <span id="name-call_details" class="file-name-display">No file selected</span>
+              </div>
+            </div>
+
+            <!-- Activities Sheet -->
+            <div id="card-activities" class="upload-card">
+              <div class="upload-card-header">
+                <span class="upload-card-title">2. Bitrix Activities</span>
+                <span id="badge-activities" class="upload-status-badge status-empty">Empty</span>
+              </div>
+              <div class="file-input-wrapper">
+                <label class="upload-btn-label" for="file-activities">Choose File</label>
+                <input type="file" id="file-activities" accept=".csv" onchange="handleFileSelect('activities')">
+                <span id="name-activities" class="file-name-display">No file selected</span>
+              </div>
+            </div>
+
+            <!-- Breaks Sheet -->
+            <div id="card-reports_break" class="upload-card">
+              <div class="upload-card-header">
+                <span class="upload-card-title">3. Reports Break</span>
+                <span id="badge-reports_break" class="upload-status-badge status-empty">Empty</span>
+              </div>
+              <div class="file-input-wrapper">
+                <label class="upload-btn-label" for="file-reports_break">Choose File</label>
+                <input type="file" id="file-reports_break" accept=".csv" onchange="handleFileSelect('reports_break')">
+                <span id="name-reports_break" class="file-name-display">No file selected</span>
+              </div>
+            </div>
+
+            <!-- QA Records Sheet -->
+            <div id="card-qa_records" class="upload-card">
+              <div class="upload-card-header">
+                <span class="upload-card-title">4. Quality Assurance</span>
+                <span id="badge-qa_records" class="upload-status-badge status-empty">Empty</span>
+              </div>
+              <div class="file-input-wrapper">
+                <label class="upload-btn-label" for="file-qa_records">Choose File</label>
+                <input type="file" id="file-qa_records" accept=".csv" onchange="handleFileSelect('qa_records')">
+                <span id="name-qa_records" class="file-name-display">No file selected</span>
+              </div>
+            </div>
+
+            <!-- Mapping Users Sheet (Optional) -->
+            <div id="card-mapping_users" class="upload-card loaded">
+              <div class="upload-card-header">
+                <span class="upload-card-title">5. Agent Map (Optional)</span>
+                <span id="badge-mapping_users" class="upload-status-badge status-loaded">Using Preloaded</span>
+              </div>
+              <div class="file-input-wrapper">
+                <label class="upload-btn-label" for="file-mapping_users">Replace Map</label>
+                <input type="file" id="file-mapping_users" accept=".csv" onchange="handleFileSelect('mapping_users')">
+                <span id="name-mapping_users" class="file-name-display">Preloaded default mapping</span>
+              </div>
+            </div>
+
           </div>
-          <div class="chart-container">
-            <span class="chart-title">Average Handle Time (Seconds) vs Inbound CSAT (%)</span>
-            <canvas id="chart-comparison" style="flex:1; width:100%; max-height:280px;"></canvas>
-          </div>
-        </div>
-      </div>
 
-      <!-- Content: Standings Table -->
-      <div id="tab-standings" class="tab-content">
-        <div class="controls-row">
-          <input type="text" id="search-box" class="search-input" placeholder="Search agent by name..."
-            oninput="filterTable()">
-          <button class="btn btn-accent" onclick="exportKPIReport()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export CSV Summary
+          <button class="btn btn-primary" onclick="calculateKPIs()" style="justify-content:center; padding:12px; font-size:0.95rem;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Calculate KPIs
           </button>
         </div>
 
-        <div class="table-container">
-          <table id="kpi-table">
-            <thead>
-              <tr>
-                <th style="cursor:pointer;" onclick="sortTable(0)">Agent</th>
-                <th style="cursor:pointer;" onclick="sortTable(1)">Leader</th>
-                <th style="cursor:pointer;" onclick="sortTable(2)">Calls In</th>
-                <th style="cursor:pointer;" onclick="sortTable(3)">Calls Out</th>
-                <th style="cursor:pointer;" onclick="sortTable(4)">In Success %</th>
-                <th style="cursor:pointer;" onclick="sortTable(5)">AHT (Sec)</th>
-                <th style="cursor:pointer;" onclick="sortTable(6)">QC Score</th>
-                <th style="cursor:pointer;" onclick="sortTable(7)">Performance</th>
-                <th style="cursor:pointer;" onclick="sortTable(8)">Combined</th>
-                <th style="cursor:pointer;" onclick="sortTable(9)">Grade</th>
-              </tr>
-            </thead>
-            <tbody id="kpi-table-body">
-              <tr>
-                <td colspan="10" style="text-align:center; padding: 40px; color: var(--text-muted);">No data parsed yet.
-                  Load demo data or upload your CSV files to calculate metrics.</td>
-              </tr>
-            </tbody>
-          </table>
+        <!-- Right Dashboard Panel -->
+        <div class="report-panel">
+
+          <!-- Summary KPI metrics cards -->
+          <div class="summary-grid">
+            <div class="metric-card">
+              <span class="metric-title">Total Calls</span>
+              <span id="lbl-total-calls" class="metric-value">—</span>
+              <span id="lbl-calls-detail" class="metric-subtext">No data processed</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-title">Answer Rate</span>
+              <span id="lbl-answer-rate" class="metric-value">—</span>
+              <span id="lbl-rate-detail" class="metric-subtext">No data processed</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-title">Avg Handle Time</span>
+              <span id="lbl-avg-aht" class="metric-value">—</span>
+              <span id="lbl-aht-detail" class="metric-subtext">No data processed</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-title">Avg QC Score</span>
+              <span id="lbl-avg-qc" class="metric-value">—</span>
+              <span id="lbl-qc-detail" class="metric-subtext">No data processed</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-title">Top Agent</span>
+              <span id="lbl-top-agent" class="metric-value" style="font-size:1.35rem; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
+              <span id="lbl-top-score" class="metric-subtext">No data processed</span>
+            </div>
+          </div>
+
+          <!-- Interactive Navigation Tabs -->
+          <div class="tab-container">
+            <button id="tab-btn-overview" class="tab-btn active" onclick="switchTab('overview')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+              Analytics Overview
+            </button>
+            <button id="tab-btn-standings" class="tab-btn" onclick="switchTab('standings')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34"/><path d="M12 2a5 5 0 0 0-5 5v3.66a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z"/></svg>
+              Agent Leaderboard
+            </button>
+          </div>
+
+          <!-- Column Mapper Debug Alert -->
+          <div id="mapping-alert-box" class="mapping-box">
+            <div class="mapping-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-amber);"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              Custom Column Mapping Needed
+            </div>
+            <p style="font-size:0.78rem; color:var(--text-muted);">Some fields did not automatically match our heuristics. Choose correct columns:</p>
+            <div class="mapping-fields-grid" id="mapping-selectors-container">
+              <!-- Populated dynamic -->
+            </div>
+            <button class="btn btn-accent" onclick="recalculateAfterMap()" style="padding: 4px 10px; font-size:0.75rem; align-self: flex-start; margin-top:5px;">Apply Map</button>
+          </div>
+
+          <!-- Content: Overview Analytics -->
+          <div id="tab-overview" class="tab-content active">
+            <div class="charts-row">
+              <div class="chart-container">
+                <span class="chart-title">Agent Combined Scores (%)</span>
+                <canvas id="chart-scores" style="flex:1; width:100%; max-height:280px;"></canvas>
+              </div>
+              <div class="chart-container">
+                <span class="chart-title">Average Handle Time (Seconds) vs Inbound CSAT (%)</span>
+                <canvas id="chart-comparison" style="flex:1; width:100%; max-height:280px;"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Content: Standings Table -->
+          <div id="tab-standings" class="tab-content">
+            <div class="controls-row">
+              <input type="text" id="search-box" class="search-input" placeholder="Search agent by name..." oninput="filterTable()">
+              <button class="btn btn-accent" onclick="exportKPIReport()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export CSV Summary
+              </button>
+            </div>
+
+            <div class="table-container">
+              <table id="kpi-table">
+                <thead>
+                  <tr>
+                    <th style="cursor:pointer;" onclick="sortTable(0)">Agent</th>
+                    <th style="cursor:pointer;" onclick="sortTable(1)">Leader</th>
+                    <th style="cursor:pointer;" onclick="sortTable(2)">Calls In</th>
+                    <th style="cursor:pointer;" onclick="sortTable(3)">Calls Out</th>
+                    <th style="cursor:pointer;" onclick="sortTable(4)">In Success %</th>
+                    <th style="cursor:pointer;" onclick="sortTable(5)">AHT (Sec)</th>
+                    <th style="cursor:pointer;" onclick="sortTable(6)">QC Score</th>
+                    <th style="cursor:pointer;" onclick="sortTable(7)">Performance</th>
+                    <th style="cursor:pointer;" onclick="sortTable(8)">Combined</th>
+                    <th style="cursor:pointer;" onclick="sortTable(9)">Grade</th>
+                  </tr>
+                </thead>
+                <tbody id="kpi-table-body">
+                  <tr>
+                    <td colspan="10" style="text-align:center; padding: 40px; color: var(--text-muted);">No data parsed yet. Load demo data or upload your CSV files to calculate metrics.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </div>
-
-    </div>
+    </main>
   </div>
 
   <!-- Agent Detailed slide overlay modal -->
@@ -983,8 +1140,7 @@
       <div class="modal-body">
         <!-- Left: Metrics breakdown -->
         <div style="display:flex; flex-direction:column; gap: 15px;">
-          <h4 style="font-size:0.9rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Overall
-            Grades</h4>
+          <h4 style="font-size:0.9rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Overall Grades</h4>
 
           <div class="modal-metrics-grid">
             <div class="modal-metric-box">
@@ -1001,8 +1157,7 @@
             </div>
           </div>
 
-          <h4 style="font-size:0.9rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Call
-            Statistics</h4>
+          <h4 style="font-size:0.9rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Call Statistics</h4>
           <div class="modal-metrics-grid">
             <div class="modal-metric-box">
               <div class="modal-metric-lbl">Inbound Calls</div>
@@ -1033,8 +1188,7 @@
 
         <!-- Right: CRM & Remarks breakdown -->
         <div style="display:flex; flex-direction:column; gap: 15px;">
-          <h4 style="font-size:0.9rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">CRM
-            Registration & Logs</h4>
+          <h4 style="font-size:0.9rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">CRM Registration & Logs</h4>
           <div class="modal-metrics-grid">
             <div class="modal-metric-box">
               <div class="modal-metric-lbl">Activities Inbound</div>
@@ -1066,8 +1220,7 @@
             </div>
           </div>
 
-          <h4 style="font-size:0.9rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">System
-            Auto-Remarks (Arabic)</h4>
+          <h4 style="font-size:0.9rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">System Auto-Remarks (Arabic)</h4>
           <div id="m-remarks-card" class="remarks-card">
             No remarks compiled.
           </div>
@@ -1077,7 +1230,7 @@
     </div>
   </div>
 
-  <script>
+    <script>
     // Embedded sample files loaded by the python compilation script
     const sampleFiles = {
       mapping_users: `﻿"Mapping_Users[No. Agent]","Mapping_Users[Agent Name Issabel]","Mapping_Users[No. Agent 2]","Mapping_Users[Agent Name Issabel 2]","Mapping_Users[No. Agent 3]","Mapping_Users[Agent Name Issabel 3]","Mapping_Users[No. Agent 4]","Mapping_Users[Agent Name Issabel 5]","Mapping_Users[Role]","Mapping_Users[3cx User]","Mapping_Users[3cx Code]","Mapping_Users[Agent Name]","Mapping_Users[leader]","Mapping_Users[Login Bitrix]","Mapping_Users[ID Bitrix]","Mapping_Users[Bitrix User]","Mapping_Users[alhayatapplication]","Mapping_Users[Naw CRM DD]","Mapping_Users[DD CRM]","Mapping_Users[DD CRM 2]","Mapping_Users[DD CRM 3]","Mapping_Users[alhayatapplication Users]","Mapping_Users[AgentName_Clean]","Mapping_Users[BitrixLogin_Clean]","Mapping_Users[Employee ID]"
@@ -4027,7 +4180,33 @@
       document.getElementById('mapping-alert-box').style.display = "none";
       calculateKPIs();
     }
+  
+    // Dynamic date and connection status badge updates
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    document.getElementById('header-date').textContent = new Date().toLocaleDateString('en-US', options);
+
+    async function checkBotStatus() {
+      try {
+        const res = await fetch('/bot-status');
+        const status = await res.json();
+        const badge = document.getElementById('connection-status');
+        const statusText = document.getElementById('status-text');
+        if (status.connected) {
+          badge.className = 'badge badge-connected';
+          statusText.textContent = 'WhatsApp Connected';
+        } else if (status.hasQR) {
+          badge.className = 'badge badge-disconnected';
+          statusText.textContent = 'Link Device Pending';
+        } else {
+          badge.className = 'badge badge-connecting';
+          statusText.textContent = 'Connecting Sockets...';
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+    checkBotStatus();
+    setInterval(checkBotStatus, 3000);
   </script>
 </body>
-
 </html>
