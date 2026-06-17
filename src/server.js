@@ -81,19 +81,25 @@ app.get('/', async (_req, res) => {
   <title>Patrix Medical — WhatsApp Console</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Lexend:wght@300;400;600;800&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-dark: #080d16;
-      --panel-bg: rgba(15, 23, 42, 0.75);
-      --accent-green: #10b981;
-      --accent-blue: #3b82f6;
-      --accent-yellow: #f59e0b;
-      --accent-red: #ef4444;
+      --bg-dark: #090d16;
+      --panel-bg: rgba(15, 23, 42, 0.6);
+      --accent-cyan: #0891b2;
+      --accent-cyan-glow: rgba(8, 145, 178, 0.15);
+      --accent-emerald: #10b981;
+      --accent-emerald-glow: rgba(16, 185, 129, 0.15);
+      --accent-amber: #f59e0b;
+      --accent-amber-glow: rgba(245, 158, 11, 0.15);
+      --accent-rose: #f43f5e;
+      --accent-rose-glow: rgba(244, 63, 94, 0.15);
       --text-main: #f1f5f9;
       --text-muted: #94a3b8;
       --border-color: rgba(255, 255, 255, 0.08);
       --terminal-bg: #030712;
+      --font-headings: 'Lexend', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-body: 'Source Sans 3', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     
     * {
@@ -103,10 +109,10 @@ app.get('/', async (_req, res) => {
     }
     
     body {
-      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: var(--font-body);
       background-color: var(--bg-dark);
       background-image: 
-        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+        radial-gradient(at 0% 0%, rgba(8, 145, 178, 0.1) 0px, transparent 50%),
         radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.07) 0px, transparent 50%);
       background-attachment: fixed;
       color: var(--text-main);
@@ -132,20 +138,23 @@ app.get('/', async (_req, res) => {
     }
     
     .logo-icon {
-      font-size: 2.2rem;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
       animation: pulse-icon 3s infinite ease-in-out;
     }
     
     @keyframes pulse-icon {
       0%, 100% { transform: scale(1) rotate(0deg); }
-      50% { transform: scale(1.08) rotate(5deg); }
+      50% { transform: scale(1.08) rotate(3deg); }
     }
     
     .logo-text h1 {
+      font-family: var(--font-headings);
       font-size: 1.6rem;
       font-weight: 800;
       letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #60a5fa, #34d399);
+      background: linear-gradient(135deg, #06b6d4, #10b981);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -223,10 +232,15 @@ app.get('/', async (_req, res) => {
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
       display: flex;
       flex-direction: column;
-      transition: transform 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    
+    .card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
     }
 
     .card-title {
+      font-family: var(--font-headings);
       font-size: 1.1rem;
       font-weight: 600;
       margin-bottom: 20px;
@@ -319,14 +333,15 @@ app.get('/', async (_req, res) => {
     }
 
     .btn-export {
-      background: rgba(59, 130, 246, 0.15);
-      border-color: rgba(59, 130, 246, 0.3);
-      color: #93c5fd;
+      background: rgba(8, 145, 178, 0.15);
+      border-color: rgba(8, 145, 178, 0.3);
+      color: #22d3ee;
       font-weight: 600;
     }
 
     .btn-export:hover {
-      background: rgba(59, 130, 246, 0.25);
+      background: rgba(8, 145, 178, 0.25);
+      border-color: rgba(8, 145, 178, 0.45);
     }
 
     .terminal {
@@ -422,7 +437,9 @@ app.get('/', async (_req, res) => {
 
   <header>
     <div class="logo-container">
-      <div class="logo-icon">🏥</div>
+      <div class="logo-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      </div>
       <div class="logo-text">
         <h1>Patrix Medical</h1>
         <p>WhatsApp Core Console</p>
@@ -430,8 +447,14 @@ app.get('/', async (_req, res) => {
     </div>
 
     <div style="display: flex; gap: 15px; align-items: center;">
-      <button onclick="window.location.href='/kpi'" style="background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; padding: 8px 16px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; backdrop-filter: blur(12px); font-family: inherit; transition: all 0.3s ease;">📊 Agent KPI Dashboard</button>
-      <button onclick="window.location.href='/complaints'" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; padding: 8px 16px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; backdrop-filter: blur(12px); font-family: inherit; transition: all 0.3s ease;">🚨 MOH Complaints</button>
+      <button onclick="window.location.href='/kpi'" style="background: rgba(8, 145, 178, 0.12); border: 1px solid rgba(8, 145, 178, 0.3); color: #22d3ee; padding: 8px 16px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; backdrop-filter: blur(12px); font-family: inherit; transition: all 0.3s ease; display: inline-flex; align-items: center;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Agent KPI Dashboard
+      </button>
+      <button onclick="window.location.href='/complaints'" style="background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.3); color: #fca5a5; padding: 8px 16px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; cursor: pointer; backdrop-filter: blur(12px); font-family: inherit; transition: all 0.3s ease; display: inline-flex; align-items: center;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        MOH Complaints
+      </button>
       <div id="connection-status" class="badge">
         <div class="dot"></div>
         <span id="status-text">Checking Status...</span>
@@ -442,7 +465,10 @@ app.get('/', async (_req, res) => {
   <div id="main-grid-element" class="main-grid">
     <!-- QR Card (Rendered dynamic) -->
     <div id="qr-card" class="card" style="display: none;">
-      <h3 class="card-title">📱 Scan QR Code</h3>
+      <h3 class="card-title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; color: var(--accent-cyan);"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        Scan QR Code
+      </h3>
       <div class="qr-container">
         <img id="qr-img" src="" alt="Scan QR" />
         <div class="instructions">
@@ -458,7 +484,10 @@ app.get('/', async (_req, res) => {
 
     <!-- Active Connected Info Card (Rendered dynamic) -->
     <div id="info-card" class="card" style="display: none;">
-      <h3 class="card-title">⚙️ Core Controller</h3>
+      <h3 class="card-title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; color: var(--accent-cyan);"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Core Controller
+      </h3>
       <div style="display:flex; flex-direction:column; gap: 18px; flex:1; justify-content:center;">
         <div>
           <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">ENVIRONMENT STATUS</h4>
@@ -469,14 +498,20 @@ app.get('/', async (_req, res) => {
           <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
             Export your WhatsApp token session directly to keep it persistently authenticated in Railway / Back4App / cloud hosting.
           </p>
-          <button class="btn btn-export" onclick="exportSession()" style="width:100%; justify-content:center; padding:10px; margin-bottom:12px;">💾 Export Session Base64</button>
+          <button class="btn btn-export" onclick="exportSession()" style="width:100%; justify-content:center; padding:10px; margin-bottom:12px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Session Base64
+          </button>
         </div>
         <div>
           <h4 style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">MOH NUMBERS EXTRACTION</h4>
           <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px; line-height:1.45;">
             Extract all phone numbers currently labeled as "وزارة الصحة" on your phone to add them to your Railway variables.
           </p>
-          <button class="btn btn-export" onclick="exportMOHNumbers()" style="width:100%; justify-content:center; padding:10px; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #a7f3d0;">📋 Extract MOH Numbers</button>
+          <button class="btn btn-export" onclick="exportMOHNumbers()" style="width:100%; justify-content:center; padding:10px; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #a7f3d0;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+            Extract MOH Numbers
+          </button>
         </div>
       </div>
     </div>
@@ -484,10 +519,19 @@ app.get('/', async (_req, res) => {
     <!-- System Terminal Card -->
     <div class="card console-card">
       <div class="console-header">
-        <h3 class="card-title" style="margin-bottom:0;">💻 Core Diagnostics Stream</h3>
+        <h3 class="card-title" style="margin-bottom:0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; color: var(--accent-cyan);"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          Core Diagnostics Stream
+        </h3>
         <div class="console-actions">
-          <button class="btn" onclick="clearConsole()">🧹 Clear Screen</button>
-          <button class="btn" onclick="downloadLogs()">📥 Download Logs</button>
+          <button class="btn" onclick="clearConsole()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            Clear Screen
+          </button>
+          <button class="btn" onclick="downloadLogs()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download Logs
+          </button>
         </div>
       </div>
       <div class="terminal" id="terminal-screen">
