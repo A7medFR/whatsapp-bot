@@ -837,6 +837,37 @@ app.post('/api/complaints/:id/promote', (req, res) => {
 });
 
 /**
+ * POST /api/complaints
+ * Manually adds a new complaint.
+ */
+app.post('/api/complaints', (req, res) => {
+  try {
+    const newComplaint = wa.addManualComplaint(req.body);
+    res.json({ success: true, message: 'Complaint manually added successfully.', complaint: newComplaint });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/complaints/:id
+ * Manually updates/edits an existing complaint.
+ */
+app.put('/api/complaints/:id', (req, res) => {
+  const { id } = req.params;
+  try {
+    const updated = wa.updateManualComplaint(id, req.body);
+    if (updated) {
+      res.json({ success: true, message: 'Complaint manually updated successfully.', complaint: updated });
+    } else {
+      res.status(404).json({ error: `Complaint with ID ${id} not found.` });
+    }
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/test/simulate-incoming
  * Simulates an incoming message from an MOH official for local/pipeline testing.
  */

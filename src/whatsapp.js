@@ -241,6 +241,82 @@ function promoteTemporaryComplaint(complaintId, officialId) {
   return null;
 }
 
+function addManualComplaint(data) {
+  const complaints = loadComplaintsCache();
+  const ticketId = (data.ticketId || '').trim() || `complaint_${data.phone}_${Math.floor(Date.now() / 1000)}`;
+  
+  // Check if ticketId already exists
+  const isDuplicate = complaints.some(c => c.ticketId === ticketId || c.complaintId === ticketId);
+  if (isDuplicate) {
+    throw new Error(`A complaint with ticket ID ${ticketId} already exists.`);
+  }
+
+  const cleanPhone = (data.phone || '').replace(/\D/g, '');
+  const newComplaint = {
+    complaintId: ticketId,
+    ticketId: ticketId,
+    phone: cleanPhone,
+    name: data.name || 'وزارة الصحة',
+    senderPhone: cleanPhone,
+    senderName: data.name || 'وزارة الصحة',
+    status: data.status || 'OPEN',
+    summary: data.summary || 'شكوى مدخلة يدوياً',
+    category: data.category || 'أخرى',
+    draftReply: data.draftReply || '',
+    openDate: data.openDate || new Date().toISOString(),
+    closeDate: data.status === 'CLOSED' ? (data.closeDate || new Date().toISOString()) : null,
+    messageCount: parseInt(data.messageCount, 10) || 0,
+    reminderCount: parseInt(data.reminderCount, 10) || 0,
+    messages: data.messages || [],
+    isTemporary: !!data.isTemporary
+  };
+
+  complaints.push(newComplaint);
+  saveComplaintsCache(complaints);
+  logEvent(`➕ Manually added complaint ${ticketId} for +${newComplaint.phone}`, 'info');
+  return newComplaint;
+}
+
+function updateManualComplaint(ticketId, data) {
+  const complaints = loadComplaintsCache();
+  const index = complaints.findIndex(c => c.ticketId === ticketId || c.complaintId === ticketId);
+  if (index === -1) {
+    return null;
+  }
+
+  const c = complaints[index];
+  
+  if (data.phone) {
+    const clean = data.phone.replace(/\D/g, '');
+    c.phone = clean;
+    c.senderPhone = clean;
+  }
+  if (data.name) {
+    c.name = data.name;
+    c.senderName = data.name;
+  }
+  if (data.status) {
+    c.status = data.status;
+    if (data.status === 'CLOSED' && !c.closeDate) {
+      c.closeDate = new Date().toISOString();
+    } else if (data.status === 'OPEN') {
+      c.closeDate = null;
+    }
+  }
+  if (data.summary !== undefined) c.summary = data.summary;
+  if (data.category !== undefined) c.category = data.category;
+  if (data.draftReply !== undefined) c.draftReply = data.draftReply;
+  if (data.messageCount !== undefined) c.messageCount = parseInt(data.messageCount, 10) || 0;
+  if (data.reminderCount !== undefined) c.reminderCount = parseInt(data.reminderCount, 10) || 0;
+  
+  // If reminders count was increased manually, let's make sure the messages array has at least that many reminders
+  // we can append mock reminder messages if they want, but let's keep it simple.
+  
+  saveComplaintsCache(complaints);
+  logEvent(`✏️ Manually updated complaint ${ticketId}`, 'info');
+  return c;
+}
+
 function hasAttachment(msg) {
   const m = msg?.message;
   if (!m) return false;
@@ -1399,5 +1475,5 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels, addManualComplaint, updateManualComplaint };
 

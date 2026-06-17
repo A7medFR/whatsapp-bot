@@ -920,6 +920,7 @@
         </select>
         <button class="btn btn-success" onclick="syncAllChats(this)" id="btn-scan-all">🔍 Scan All MOH Chats</button>
         <button class="btn btn-ai" onclick="aiDeepScan()" id="btn-ai-scan">🧠 AI Deep Scan</button>
+        <button class="btn btn-accent" onclick="openAddComplaintModal()" id="btn-add-complaint" style="border-color: rgba(16, 185, 129, 0.4); color: #a7f3d0; background: rgba(16, 185, 129, 0.1);">➕ Add Complaint Manually</button>
         <button class="btn" onclick="fetchComplaints()" id="btn-refresh">🔄 Refresh</button>
       </div>
     </div>
@@ -1031,6 +1032,82 @@
           <button class="btn" onclick="closeModal()">Close Window</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Manual Complaint Modal -->
+  <div id="manual-modal-overlay" class="overlay" style="display: none; align-items: center; justify-content: center; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 1000;">
+    <div class="modal" style="background: linear-gradient(135deg, #0f172a 0%, #080d16 100%); border: 1px solid var(--border-color); border-radius: 16px; padding: 25px; width: 500px; max-width: 95vw; box-shadow: 0 15px 40px rgba(0,0,0,0.5);">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+        <div class="modal-title">
+          <h2 id="manual-modal-title" style="font-size: 1.3rem; font-weight: 700; color: #93c5fd;">Add Complaint Manually</h2>
+          <p id="manual-modal-subtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Enter MOH complaint ticket details</p>
+        </div>
+        <button class="close-btn" onclick="closeManualModal()" style="font-size: 1.5rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer;">×</button>
+      </div>
+
+      <form id="manual-complaint-form" onsubmit="saveManualComplaint(event)" style="display: flex; flex-direction: column; gap: 15px;">
+        <div style="display: flex; gap: 15px;">
+          <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
+            <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Ticket ID</label>
+            <input type="text" id="manual-ticket-id-input" class="search-input" style="width: 100%;" placeholder="e.g. MOH-123456" />
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
+            <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Phone Number</label>
+            <input type="text" id="manual-phone-input" class="search-input" style="width: 100%;" placeholder="e.g. 966501234567" required />
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 15px;">
+          <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
+            <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Sender Name</label>
+            <input type="text" id="manual-name-input" class="search-input" style="width: 100%;" placeholder="e.g. وزارة الصحة" value="وزارة الصحة" />
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
+            <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Status</label>
+            <select id="manual-status-input" class="select-input" style="width: 100%; height: 38px; background: #0f172a; border: 1px solid var(--border-color); color: var(--text-main); border-radius: 8px; padding: 0 10px;">
+              <option value="OPEN">OPEN</option>
+              <option value="CLOSED">CLOSED</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 15px;">
+          <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
+            <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Category</label>
+            <select id="manual-category-input" class="select-input" style="width: 100%; height: 38px; background: #0f172a; border: 1px solid var(--border-color); color: var(--text-main); border-radius: 8px; padding: 0 10px;">
+              <option value="أوقات الانتظار">أوقات الانتظار</option>
+              <option value="سلوك الموظفين">سلوك الموظفين</option>
+              <option value="الفواتير والأسعار">الفواتير والأسعار</option>
+              <option value="جودة العلاج">جودة العلاج</option>
+              <option value="أخرى" selected>أخرى</option>
+            </select>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px; width: 120px;">
+            <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Reminders</label>
+            <input type="number" id="manual-reminders-input" class="search-input" style="width: 100%;" min="0" value="0" />
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px; width: 120px;">
+            <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Msg Count</label>
+            <input type="number" id="manual-messages-input" class="search-input" style="width: 100%;" min="0" value="0" />
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">AI Summary / Description</label>
+          <input type="text" id="manual-summary-input" class="search-input" style="width: 100%;" placeholder="e.g. شكوى بخصوص التأخر في الخدمة" value="شكوى مدخلة يدوياً" />
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Suggested Reply Draft (Arabic)</label>
+          <textarea id="manual-draft-input" class="search-input" style="width: 100%; height: 70px; resize: none; font-family: sans-serif;" placeholder="تم استلام رسالتكم وجاري متابعتها مع القسم المختص..."></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 10px;">
+          <button type="button" class="btn" onclick="closeManualModal()">Cancel</button>
+          <button type="submit" class="btn btn-success" id="manual-save-btn">💾 Save Complaint</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -1153,6 +1230,8 @@
         let actionsHtml = `<button class="btn btn-accent" onclick="openComplaintLogs('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem;">💬 Audit Log</button>`;
         
         actionsHtml += `<button class="btn btn-warning" onclick="syncComplaintHistory('${c.phone || c.senderPhone}', this)" style="padding: 5px 10px; font-size: 0.78rem;">🔄 Sync</button>`;
+
+        actionsHtml += `<button class="btn btn-accent" onclick="openEditComplaintModal('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem; border-color: rgba(59, 130, 246, 0.35); color: #93c5fd; background: rgba(59, 130, 246, 0.05);">✏️ Edit</button>`;
 
         if (c.status === 'OPEN') {
           actionsHtml += `<button class="btn btn-danger" onclick="closeComplaintTicket('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem;">Resolve</button>`;
@@ -1566,6 +1645,120 @@
       } finally {
         btn.disabled = false;
         btn.textContent = '🚀 Trigger Simulation';
+      }
+    }
+
+    let isEditingComplaint = false;
+    let editComplaintId = null;
+
+    function openAddComplaintModal() {
+      isEditingComplaint = false;
+      editComplaintId = null;
+      document.getElementById('manual-modal-title').textContent = 'Add Complaint Manually';
+      document.getElementById('manual-modal-subtitle').textContent = 'Enter MOH complaint ticket details';
+      
+      // Clear inputs
+      document.getElementById('manual-ticket-id-input').value = '';
+      document.getElementById('manual-ticket-id-input').disabled = false;
+      document.getElementById('manual-phone-input').value = '';
+      document.getElementById('manual-name-input').value = 'وزارة الصحة';
+      document.getElementById('manual-status-input').value = 'OPEN';
+      document.getElementById('manual-category-input').value = 'أخرى';
+      document.getElementById('manual-reminders-input').value = '0';
+      document.getElementById('manual-messages-input').value = '0';
+      document.getElementById('manual-summary-input').value = 'شكوى مدخلة يدوياً';
+      document.getElementById('manual-draft-input').value = '';
+      
+      document.getElementById('manual-modal-overlay').style.display = 'flex';
+    }
+
+    function openEditComplaintModal(complaintId) {
+      const complaint = complaintsData.find(c => c.complaintId === complaintId || c.ticketId === complaintId);
+      if (!complaint) return;
+
+      isEditingComplaint = true;
+      editComplaintId = complaintId;
+      document.getElementById('manual-modal-title').textContent = 'Edit Complaint Manually';
+      document.getElementById('manual-modal-subtitle').textContent = `Editing details for ticket ${complaintId}`;
+
+      // Populate inputs
+      document.getElementById('manual-ticket-id-input').value = complaintId;
+      document.getElementById('manual-ticket-id-input').disabled = true;
+      document.getElementById('manual-phone-input').value = complaint.phone || '';
+      document.getElementById('manual-name-input').value = complaint.name || 'وزارة الصحة';
+      document.getElementById('manual-status-input').value = complaint.status || 'OPEN';
+      document.getElementById('manual-category-input').value = complaint.category || 'أخرى';
+      document.getElementById('manual-reminders-input').value = complaint.reminderCount || '0';
+      document.getElementById('manual-messages-input').value = complaint.messageCount || '0';
+      document.getElementById('manual-summary-input').value = complaint.summary || '';
+      document.getElementById('manual-draft-input').value = complaint.draftReply || '';
+
+      document.getElementById('manual-modal-overlay').style.display = 'flex';
+    }
+
+    function closeManualModal() {
+      document.getElementById('manual-modal-overlay').style.display = 'none';
+    }
+
+    async function saveManualComplaint(e) {
+      e.preventDefault();
+      
+      const phone = document.getElementById('manual-phone-input').value.trim();
+      const name = document.getElementById('manual-name-input').value.trim();
+      const status = document.getElementById('manual-status-input').value;
+      const category = document.getElementById('manual-category-input').value;
+      const reminderCount = parseInt(document.getElementById('manual-reminders-input').value, 10) || 0;
+      const messageCount = parseInt(document.getElementById('manual-messages-input').value, 10) || 0;
+      const summary = document.getElementById('manual-summary-input').value.trim();
+      const draftReply = document.getElementById('manual-draft-input').value.trim();
+      
+      const payload = {
+        phone,
+        name,
+        status,
+        category,
+        reminderCount,
+        messageCount,
+        summary,
+        draftReply
+      };
+
+      const saveBtn = document.getElementById('manual-save-btn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = '💾 Saving...';
+
+      try {
+        let response;
+        if (isEditingComplaint && editComplaintId) {
+          response = await fetch(`/api/complaints/${editComplaintId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          const ticketId = document.getElementById('manual-ticket-id-input').value.trim();
+          if (ticketId) payload.ticketId = ticketId;
+          
+          response = await fetch('/api/complaints', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+          showToast(isEditingComplaint ? '✅ Complaint updated successfully!' : '✅ Complaint added successfully!');
+          closeManualModal();
+          fetchComplaints();
+        } else {
+          showToast(`❌ Save failed: ${data.error || 'Server error'}`);
+        }
+      } catch (err) {
+        showToast('❌ Connection error while saving complaint.');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 Save Complaint';
       }
     }
 
