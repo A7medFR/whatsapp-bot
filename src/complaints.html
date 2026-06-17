@@ -164,6 +164,145 @@
       color: var(--text-muted);
     }
 
+    .btn-ai {
+      background: rgba(139, 92, 246, 0.18);
+      border-color: rgba(139, 92, 246, 0.4);
+      color: #c4b5fd;
+      font-weight: 600;
+    }
+
+    .btn-ai:hover:not(:disabled) {
+      background: rgba(139, 92, 246, 0.3);
+      border-color: rgba(139, 92, 246, 0.6);
+      box-shadow: 0 0 16px rgba(139, 92, 246, 0.25);
+    }
+
+    /* AI Deep Scan progress modal */
+    .ai-scan-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .ai-scan-overlay.show { display: flex; }
+
+    .ai-scan-modal {
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      border: 1px solid rgba(139, 92, 246, 0.35);
+      border-radius: 20px;
+      padding: 36px 40px;
+      width: 480px;
+      max-width: 95vw;
+      box-shadow: 0 0 60px rgba(139, 92, 246, 0.2);
+      text-align: center;
+    }
+
+    .ai-scan-icon {
+      font-size: 3rem;
+      margin-bottom: 12px;
+      animation: ai-pulse 1.6s infinite ease-in-out;
+    }
+
+    @keyframes ai-pulse {
+      0%, 100% { transform: scale(1); filter: brightness(1); }
+      50% { transform: scale(1.12); filter: brightness(1.4); }
+    }
+
+    .ai-scan-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #c4b5fd;
+      margin-bottom: 6px;
+    }
+
+    .ai-scan-subtitle {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .ai-scan-progress-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+
+    .ai-scan-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      border-radius: 999px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+
+    .ai-scan-progress-fill.indeterminate {
+      animation: indeterminate-bar 1.5s infinite linear;
+      width: 40%;
+    }
+
+    @keyframes indeterminate-bar {
+      0% { transform: translateX(-150%); }
+      100% { transform: translateX(350%); }
+    }
+
+    .ai-scan-log {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: left;
+      font-size: 0.78rem;
+      font-family: 'Fira Code', monospace;
+      color: var(--text-muted);
+      max-height: 160px;
+      overflow-y: auto;
+      margin-top: 8px;
+    }
+
+    .ai-scan-log-line { margin-bottom: 4px; }
+    .ai-scan-log-line.success { color: #a7f3d0; }
+    .ai-scan-log-line.warn { color: #fde68a; }
+    .ai-scan-log-line.error { color: #fca5a5; }
+
+    .ai-scan-result {
+      margin-top: 18px;
+      display: none;
+    }
+
+    .ai-result-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .ai-result-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .ai-result-card .num {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: #c4b5fd;
+    }
+
+    .ai-result-card .lbl {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
     /* Summary KPI metrics cards */
     .summary-grid {
       display: grid;
@@ -780,6 +919,7 @@
           <option value="closed">Closed Only</option>
         </select>
         <button class="btn btn-success" onclick="syncAllChats(this)" id="btn-scan-all">🔍 Scan All MOH Chats</button>
+        <button class="btn btn-ai" onclick="aiDeepScan()" id="btn-ai-scan">🧠 AI Deep Scan</button>
         <button class="btn" onclick="fetchComplaints()" id="btn-refresh">🔄 Refresh</button>
       </div>
     </div>
@@ -806,7 +946,36 @@
     </div>
   </div>
 
-  <!-- Detail logs Modal overlay -->
+  <!-- AI Deep Scan Progress Modal -->
+  <div id="ai-scan-overlay" class="ai-scan-overlay">
+    <div class="ai-scan-modal">
+      <div class="ai-scan-icon">🧠</div>
+      <div class="ai-scan-title">AI Conversation Analysis</div>
+      <div class="ai-scan-subtitle" id="ai-scan-subtitle">Gemini is reading MOH conversations and detecting open complaints...</div>
+      <div class="ai-scan-progress-bar">
+        <div class="ai-scan-progress-fill indeterminate" id="ai-scan-progress-fill"></div>
+      </div>
+      <div class="ai-scan-log" id="ai-scan-log"></div>
+      <div class="ai-scan-result" id="ai-scan-result">
+        <div class="ai-result-grid">
+          <div class="ai-result-card">
+            <div class="num" id="ai-res-total">0</div>
+            <div class="lbl">Contacts Scanned</div>
+          </div>
+          <div class="ai-result-card">
+            <div class="num" id="ai-res-open" style="color: #fca5a5;">0</div>
+            <div class="lbl">Open Complaints</div>
+          </div>
+          <div class="ai-result-card">
+            <div class="num" id="ai-res-closed" style="color: #a7f3d0;">0</div>
+            <div class="lbl">Closed / None</div>
+          </div>
+        </div>
+        <button class="btn btn-ai" onclick="closeAiScanModal()" id="btn-ai-close" style="width:100%; justify-content:center;">✅ Done — View Dashboard</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modal-overlay" class="overlay">
     <div class="modal">
       <div class="modal-header">
@@ -1154,7 +1323,92 @@
       }
     }
 
+    function closeAiScanModal() {
+      document.getElementById('ai-scan-overlay').classList.remove('show');
+      fetchComplaints();
+    }
+
+    async function aiDeepScan() {
+      const btn = document.getElementById('btn-ai-scan');
+      btn.disabled = true;
+      btn.textContent = '🧠 Scanning...';
+
+      // Reset modal state
+      const overlay = document.getElementById('ai-scan-overlay');
+      const logEl = document.getElementById('ai-scan-log');
+      const resultEl = document.getElementById('ai-scan-result');
+      const progressFill = document.getElementById('ai-scan-progress-fill');
+      const subtitleEl = document.getElementById('ai-scan-subtitle');
+
+      logEl.innerHTML = '';
+      resultEl.style.display = 'none';
+      progressFill.className = 'ai-scan-progress-fill indeterminate';
+      subtitleEl.textContent = 'Gemini is reading MOH conversations and detecting open complaints...';
+      overlay.classList.add('show');
+
+      const addLog = (text, type = '') => {
+        const line = document.createElement('div');
+        line.className = `ai-scan-log-line ${type}`;
+        line.textContent = text;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+      };
+
+      addLog('🧠 Starting AI Deep Scan...', '');
+      addLog('📡 Collecting MOH phone numbers from labels, env vars, and cache...', '');
+
+      try {
+        const response = await fetch('/api/complaints/ai-deep-scan', { method: 'POST' });
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          const res = data.result;
+
+          addLog(`✅ Scan complete! Analyzed ${res.totalScanned} contacts.`, 'success');
+          if (res.openComplaints > 0) {
+            addLog(`🚨 Found ${res.openComplaints} open complaint(s) detected by AI.`, 'warn');
+          } else {
+            addLog(`✅ No new open complaints detected.`, 'success');
+          }
+          if (res.closedOrNone > 0) {
+            addLog(`📁 ${res.closedOrNone} conversation(s) had no active complaint.`, '');
+          }
+          if (res.noHistoryData > 0) {
+            addLog(`⚠️ ${res.noHistoryData} contact(s) had no message history.`, 'warn');
+          }
+          if (res.failedCount > 0) {
+            addLog(`❌ ${res.failedCount} contact(s) failed to process.`, 'error');
+          }
+
+          // Show results
+          document.getElementById('ai-res-total').textContent = res.totalScanned;
+          document.getElementById('ai-res-open').textContent = res.openComplaints;
+          document.getElementById('ai-res-closed').textContent = res.closedOrNone;
+
+          // Stop indeterminate animation, fill to 100%
+          progressFill.className = 'ai-scan-progress-fill';
+          progressFill.style.width = '100%';
+          subtitleEl.textContent = `Scan complete — ${res.openComplaints} open complaint(s) found.`;
+          resultEl.style.display = 'block';
+        } else {
+          addLog(`❌ Error: ${data.error || 'Scan failed'}`, 'error');
+          progressFill.className = 'ai-scan-progress-fill';
+          progressFill.style.width = '0%';
+          subtitleEl.textContent = 'Scan failed. Check logs.';
+          setTimeout(() => overlay.classList.remove('show'), 3000);
+        }
+      } catch (err) {
+        addLog(`❌ Connection error: ${err.message}`, 'error');
+        setTimeout(() => overlay.classList.remove('show'), 3000);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🧠 AI Deep Scan';
+      }
+    }
+
+
     function openComplaintLogs(complaintId, isSilentRefresh = false) {
+
       const complaint = complaintsData.find(c => c.complaintId === complaintId);
       if (!complaint) return;
 

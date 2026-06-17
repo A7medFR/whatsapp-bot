@@ -928,6 +928,27 @@ app.post('/api/complaints/scan-all', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/complaints/ai-deep-scan
+ * Triggers Gemini AI to read ALL MOH conversations and autonomously detect
+ * open complaints, reminder counts, and status from the raw message history.
+ */
+app.post('/api/complaints/ai-deep-scan', async (req, res) => {
+  try {
+    const result = await wa.aiDeepScanMOHConversations();
+    res.json({
+      success: true,
+      message: `AI Deep Scan complete. Analyzed ${result.totalScanned} contacts, found ${result.openComplaints} active complaint(s).`,
+      result
+    });
+  } catch (err) {
+    console.error("AI deep scan error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
 
 
 /**

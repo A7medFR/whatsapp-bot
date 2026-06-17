@@ -1,0 +1,138 @@
+[
+  {
+    "complaintId": "complaint_966500001234_1781707531",
+    "ticketId": "complaint_966500001234_1781707531",
+    "phone": "966500001234",
+    "name": "Inspector Ali",
+    "senderPhone": "966500001234",
+    "senderName": "Inspector Ali",
+    "status": "OPEN",
+    "summary": "شكوى جديدة",
+    "category": "أخرى",
+    "draftReply": "تم استلام رسالتكم وجاري متابعتها مع القسم المختص.",
+    "openDate": "2026-06-17T14:45:31.360Z",
+    "closeDate": null,
+    "messageCount": 6,
+    "reminderCount": 4,
+    "lastReminderDate": "2026-06-17T15:12:54.062Z",
+    "messages": [
+      {
+        "timestamp": "2026-06-17T14:45:31.360Z",
+        "text": "??? ?????? ???? ????? ????? ???????? ??????? ?? ???????",
+        "fromMe": false,
+        "hasAttachment": false,
+        "isReminder": false
+      },
+      {
+        "timestamp": "2026-06-17T14:45:39.386Z",
+        "text": "?????: ?? ????? ?? ????? ?????? ??? ????. ???? ??????? ?????.",
+        "fromMe": false,
+        "hasAttachment": false,
+        "isReminder": false
+      },
+      {
+        "timestamp": "2026-06-17T14:45:50.683Z",
+        "text": "تذكير: لم يصلنا رد بخصوص الشكوى حتى الآن. نرجو الإفادة فوراً.",
+        "fromMe": false,
+        "hasAttachment": false,
+        "isReminder": true
+      },
+      {
+        "timestamp": "2026-06-17T14:45:55.357Z",
+        "text": "عاجل جداً: تذكير ثاني، لم يتم استلام أي رد بخصوص الشكوى.",
+        "fromMe": false,
+        "hasAttachment": false,
+        "isReminder": true
+      },
+      {
+        "timestamp": "2026-06-17T15:11:19.280Z",
+        "text": "Reminder: Please respond to the complaint.",
+        "fromMe": false,
+        "hasAttachment": false,
+        "isReminder": true
+      },
+      {
+        "timestamp": "2026-06-17T15:12:54.062Z",
+        "text": "Very Urgent: Where is the response to our letter?",
+        "fromMe": false,
+        "hasAttachment": false,
+        "isReminder": true
+      }
+    ]
+  },
+  {
+    "complaintId": "MOH-777666",
+    "ticketId": "MOH-777666",
+    "phone": "966509999999",
+    "name": "وزارة الصحة",
+    "senderPhone": "966509999999",
+    "senderName": "وزارة الصحة",
+    "status": "CLOSED",
+    "summary": "شكوى جديدة",
+    "category": "أخرى",
+    "draftReply": "أهلاً بك، تم استلام رسالتكم وجاري فتح بطاقة شكوى للمتابعة.",
+    "openDate": "2026-06-17T15:24:53.322Z",
+    "closeDate": "2026-06-17T15:24:53.377Z",
+    "messageCount": 1,
+    "reminderCount": 1,
+    "lastReminderDate": "2026-06-17T15:24:53.322Z",
+    "messages": [
+      {
+        "timestamp": "2026-06-17T15:24:53.322Z",
+        "text": "خطاب رسمي عاجل",
+        "fromMe": false,
+        "hasAttachment": false,
+        "isReminder": true
+      },
+      {
+        "timestamp": "2026-06-17T15:24:53.356Z",
+        "text": "resolution_proof.pdf",
+        "fromMe": true,
+        "hasAttachment": true,
+        "isReminder": false
+      },
+      {
+        "timestamp": "2026-06-17T15:24:53.373Z",
+        "text": "resolution_proof.pdf",
+        "fromMe": true,
+        "hasAttachment": true,
+        "isReminder": false
+      }
+    ],
+    "isTemporary": false
+  },
+  {
+    "complaintId": "MOH-888999",
+    "ticketId": "MOH-888999",
+    "phone": "966508888888",
+    "name": "وزارة الصحة",
+    "senderPhone": "966508888888",
+    "senderName": "وزارة الصحة",
+    "status": "CLOSED",
+    "summary": "شكوى جديدة",
+    "category": "أخرى",
+    "draftReply": "أهلاً بك، تم استلام رسالتكم وجاري فتح بطاقة شكوى للمتابعة.",
+    "openDate": "2026-06-17T15:33:07.446Z",
+    "closeDate": "2026-06-17T15:33:07.484Z",
+    "messageCount": 1,
+    "reminderCount": 0,
+    "lastReminderDate": null,
+    "messages": [
+      {
+        "timestamp": "2026-06-17T15:33:07.446Z",
+        "text": "بلاغ جديد للتجربة",
+        "fromMe": false,
+        "hasAttachment": false,
+        "isReminder": false
+      },
+      {
+        "timestamp": "2026-06-17T15:33:07.484Z",
+        "text": "resolution_proof.pdf",
+        "fromMe": true,
+        "hasAttachment": true,
+        "isReminder": false
+      }
+    ],
+    "isTemporary": false
+  }
+]

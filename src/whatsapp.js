@@ -23,6 +23,9 @@ const { restoreSession } = require('./session');
 const geminiService = require('./geminiService');
 
 const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
+const STORE_FILE = path.resolve('./baileys_store.json');
+// Persist store to disk so message history survives restarts
+try { if (fs.existsSync(STORE_FILE)) store.readFromFile(STORE_FILE); } catch (_) { /* first run */ }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 function cleanAndNormalizePhone(phone) {
@@ -541,6 +544,10 @@ async function connect() {
   sock.ev.on('creds.update', saveCreds);
   store.bind(sock.ev);
 
+  // Persist store to disk every 5 minutes and after every message upsert
+  setInterval(() => { try { store.writeToFile(STORE_FILE); } catch (_) {} }, 5 * 60 * 1000);
+  sock.ev.on('messages.upsert', () => { try { store.writeToFile(STORE_FILE); } catch (_) {} });
+
   // ── Passive label events (fire if WA sends them — not guaranteed) ──────────
   sock.ev.on('labels.upsert', (labels) => {
     for (const l of (Array.isArray(labels) ? labels : [labels])) {
@@ -939,7 +946,7 @@ function getChatHistory(phone) {
   const jid = `${phone}@s.whatsapp.net`;
   const rawMessages = store.messages[jid] ? Array.from(store.messages[jid]) : [];
   
-  return rawMessages
+  const storeHistory = rawMessages
     .map(msg => {
       const text = getMessageText(msg);
       const fromMe = !!msg.key?.fromMe;
@@ -953,8 +960,24 @@ function getChatHistory(phone) {
         hasAttachment: hasAttachment(msg)
       };
     })
-    .filter(m => m.text || m.hasAttachment)
-    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    .filter(m => m.text || m.hasAttachment);
+
+  // Fallback: if the Baileys store is empty (e.g. after restart), reconstruct
+  // history from the complaints cache messages we already persisted to disk.
+  if (storeHistory.length === 0) {
+    const cached = loadComplaintsCache();
+    const match = cached.find(c => phoneNumbersMatch(c.phone || c.senderPhone || '', phone));
+    if (match && Array.isArray(match.messages) && match.messages.length > 0) {
+      return match.messages.map(m => ({
+        timestamp: m.timestamp || new Date().toISOString(),
+        sender: m.fromMe ? 'Clinic' : 'MOH',
+        text: m.text || '',
+        hasAttachment: !!m.hasAttachment
+      })).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    }
+  }
+
+  return storeHistory.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 }
 
 // ─── Reconstruct Complaint from History ───────────────────────────────────────
@@ -1034,65 +1057,86 @@ async function reconstructComplaintFromHistory(phone) {
 
 // ─── Scan All MOH Chats in Chat History ───────────────────────────────────────
 async function scanAllMOHComplaints() {
-  const phones = new Set();
+  // ── Phase 1: Direct cache refresh (no Gemini needed) ──────────────────────
+  // For all contacts that ALREADY exist in complaints_cache.json, we update
+  // their reminder counts and message counts directly from the stored messages.
+  // This is the primary fix: cache-known contacts don't need the Baileys store.
+  const existingComplaints = loadComplaintsCache();
+  const updatedComplaints = [];
+  const cachePhones = new Set();
 
-  // 1. Add labeled MOH numbers
+  for (const c of existingComplaints) {
+    const phone = (c.phone || c.senderPhone || '').replace(/\D/g, '');
+    if (!phone) continue;
+    cachePhones.add(phone);
+
+    // Re-compute reminders and counts from stored messages array
+    const msgs = Array.isArray(c.messages) ? c.messages : [];
+    const inboundMsgs = msgs.filter(m => !m.fromMe);
+    const reminderMsgs = msgs.filter(m => !m.fromMe && m.isReminder);
+    const lastReminder = reminderMsgs.length > 0 ? reminderMsgs[reminderMsgs.length - 1].timestamp : null;
+
+    let changed = false;
+    if (c.messageCount !== inboundMsgs.length) { c.messageCount = inboundMsgs.length; changed = true; }
+    if (c.reminderCount !== reminderMsgs.length) { c.reminderCount = reminderMsgs.length; changed = true; }
+    if (c.lastReminderDate !== lastReminder) { c.lastReminderDate = lastReminder; changed = true; }
+
+    if (changed) {
+      logEvent(`🔄 [Scanner] Refreshed counts for ${c.complaintId || c.ticketId}: msgs=${c.messageCount}, reminders=${c.reminderCount}`, 'info');
+    }
+    updatedComplaints.push(c);
+  }
+
+  // Save refreshed cache
+  if (updatedComplaints.length > 0) {
+    saveComplaintsCache(updatedComplaints);
+  }
+
+  const scannedCount = { success: updatedComplaints.length, failed: 0, noComplaint: 0, geminiCalled: 0 };
+
+  // ── Phase 2: Discover new contacts via Baileys store + env + labels ────────
+  // Only call Gemini for phone numbers NOT already in the cache.
+  const newPhones = new Set();
+
+  // From env vars
+  if (Array.isArray(MOH_NUMBERS)) {
+    for (const p of MOH_NUMBERS) {
+      const clean = (p || '').replace(/\D/g, '');
+      if (clean && !cachePhones.has(clean)) newPhones.add(clean);
+    }
+  }
+
+  // From MOH label in chatLabels
   try {
     const labeledPhones = await getMOHNumbersFromLabels();
     for (const p of labeledPhones) {
-      if (p) phones.add(p);
+      const clean = (p || '').replace(/\D/g, '');
+      if (clean && !cachePhones.has(clean)) newPhones.add(clean);
     }
   } catch (err) {
     logEvent(`⚠️ Failed to retrieve labeled MOH numbers during scan: ${err.message}`, 'warn');
   }
 
-  // 2. Add numbers from environment variables
-  if (Array.isArray(MOH_NUMBERS)) {
-    for (const p of MOH_NUMBERS) {
-      if (p) phones.add(p);
-    }
-  }
-
-  // 3. Add numbers from complaints cache
-  try {
-    const existingComplaints = loadComplaintsCache();
-    for (const c of existingComplaints) {
-      const p = c.phone || c.senderPhone;
-      if (p) {
-        const clean = p.replace(/\D/g, '');
-        if (clean) phones.add(clean);
-      }
-    }
-  } catch (err) {
-    logEvent(`⚠️ Failed to retrieve complaints from cache during scan: ${err.message}`, 'warn');
-  }
-
-  // 4. Add numbers that have messages in the store
+  // From live Baileys store (messages received since last restart)
   if (store && store.messages) {
     for (const jid of Object.keys(store.messages)) {
       if (jid.endsWith('@s.whatsapp.net')) {
-        const phone = jid.split('@')[0];
-        const cleanPhone = phone.replace(/\D/g, '');
-        if (cleanPhone && !phone.includes('@lid')) {
-          phones.add(cleanPhone);
-        }
+        const clean = jid.split('@')[0].replace(/\D/g, '');
+        if (clean && !cachePhones.has(clean)) newPhones.add(clean);
       }
     }
   }
 
-  const phoneList = Array.from(phones);
-  logEvent(`🔍 Found ${phoneList.length} candidate numbers for scanning history.`, 'info');
+  logEvent(`🔍 [Scanner] Phase 1 refreshed ${scannedCount.success} cached complaints. Phase 2 found ${newPhones.size} new candidate(s) to check via Gemini.`, 'info');
 
-  const scannedCount = { success: 0, failed: 0, noComplaint: 0 };
-  const updatedComplaints = [];
-
-  for (const phone of phoneList) {
+  for (const phone of newPhones) {
     try {
       const history = getChatHistory(phone);
       if (history.length === 0) {
+        scannedCount.noComplaint++;
         continue;
       }
-      
+      scannedCount.geminiCalled++;
       const reconstructed = await reconstructComplaintFromHistory(phone);
       if (reconstructed) {
         scannedCount.success++;
@@ -1101,20 +1145,200 @@ async function scanAllMOHComplaints() {
         scannedCount.noComplaint++;
       }
       // Delay to avoid Gemini API rate limits
-      await new Promise(resolve => setTimeout(resolve, 250));
+      await new Promise(resolve => setTimeout(resolve, 500));
     } catch (err) {
       scannedCount.failed++;
       logEvent(`⚠️ Scanning error for +${phone}: ${err.message}`, 'error');
     }
   }
 
-  logEvent(`🏁 Completed history scan. Reconstructed: ${scannedCount.success}, No Complaint/Closed: ${scannedCount.noComplaint}, Failed: ${scannedCount.failed}`, 'info');
+  logEvent(`🏁 Completed history scan. Refreshed: ${scannedCount.success}, Gemini calls: ${scannedCount.geminiCalled}, No Complaint: ${scannedCount.noComplaint}, Failed: ${scannedCount.failed}`, 'info');
   return {
-    scannedCandidateCount: phoneList.length,
+    scannedCandidateCount: existingComplaints.length + newPhones.size,
     successCount: scannedCount.success,
     failedCount: scannedCount.failed,
     noComplaintCount: scannedCount.noComplaint,
     complaints: updatedComplaints
+  };
+}
+
+// ─── AI Deep Scan: Read Conversations & Detect Open Complaints ──────────────────
+/**
+ * Collects ALL known MOH phone numbers, reads their full conversation history
+ * (from the Baileys store or fallback to complaints cache), then sends every
+ * conversation to Gemini AI to determine whether an open complaint exists,
+ * how many reminders were sent, and the current status.
+ *
+ * Unlike scanAllMOHComplaints() which only refreshes counts from stored data,
+ * this function makes Gemini re-read the raw messages and detect complaints
+ * autonomously — even for phones not yet tracked in the cache.
+ *
+ * @returns {Promise<object>} Scan summary with detected complaints.
+ */
+async function aiDeepScanMOHConversations() {
+  const allPhones = new Set();
+
+  // 1. MOH phones from environment variable
+  if (Array.isArray(MOH_NUMBERS)) {
+    for (const p of MOH_NUMBERS) {
+      const clean = (p || '').replace(/\D/g, '');
+      if (clean) allPhones.add(clean);
+    }
+  }
+
+  // 2. Phones from the MOH WhatsApp label (chatLabels map)
+  try {
+    const labeled = await getMOHNumbersFromLabels();
+    for (const p of labeled) {
+      const clean = (p || '').replace(/\D/g, '');
+      if (clean) allPhones.add(clean);
+    }
+  } catch (_) {}
+
+  // 3. Phones already in the complaints cache
+  const cachedComplaints = loadComplaintsCache();
+  for (const c of cachedComplaints) {
+    const p = (c.phone || c.senderPhone || '').replace(/\D/g, '');
+    if (p) allPhones.add(p);
+  }
+
+  // 4. Every phone that has messages in the live Baileys store
+  if (store && store.messages) {
+    for (const jid of Object.keys(store.messages)) {
+      if (jid.endsWith('@s.whatsapp.net')) {
+        const clean = jid.split('@')[0].replace(/\D/g, '');
+        if (clean) allPhones.add(clean);
+      }
+    }
+  }
+
+  const phoneList = Array.from(allPhones);
+  logEvent(`🧠 [AI Deep Scan] Starting Gemini conversation analysis for ${phoneList.length} MOH contact(s)...`, 'info');
+
+  const results = { found: 0, open: 0, closed: 0, noData: 0, failed: 0 };
+  const detectedComplaints = [];
+
+  for (const phone of phoneList) {
+    try {
+      // Get conversation history — from live store or fallback to cache messages
+      const history = getChatHistory(phone);
+
+      if (history.length === 0) {
+        logEvent(`🔍 [AI Deep Scan] No message history found for +${phone} — skipping.`, 'info');
+        results.noData++;
+        continue;
+      }
+
+      logEvent(`💬 [AI Deep Scan] Sending ${history.length} messages for +${phone} to Gemini...`, 'info');
+
+      // Find existing tracked complaint for this phone
+      const existingForPhone = cachedComplaints.find(c =>
+        phoneNumbersMatch(c.phone || c.senderPhone || '', phone)
+      );
+      const activeTicketId = existingForPhone
+        ? (existingForPhone.ticketId || existingForPhone.complaintId)
+        : null;
+
+      // Ask Gemini to analyze the full conversation
+      const analysis = await geminiService.analyzeChatHistory({
+        phone,
+        history,
+        activeTicketId
+      });
+
+      results.found++;
+
+      if (analysis && analysis.hasActiveComplaint) {
+        results.open++;
+
+        const finalTicketId = existingForPhone
+          ? (existingForPhone.ticketId || existingForPhone.complaintId)
+          : (analysis.extractedTicketId || `complaint_${phone}_${Math.floor(Date.now() / 1000)}`);
+
+        // Map raw history into stored message format
+        const mappedMessages = history.map(h => {
+          const isReminder = h.sender === 'MOH' && (
+            /تذكير|أين الرد|متبقي الرد|الرجاء الرد|عاجل|عجلو بالرد|بانتظار الرد|reminder|urgent|please reply|reply needed/i.test(h.text || '')
+          );
+          return {
+            timestamp: h.timestamp,
+            text: h.text || '[ملف مرفق]',
+            fromMe: h.sender === 'Clinic',
+            hasAttachment: h.hasAttachment,
+            isReminder
+          };
+        });
+
+        const isClosed = analysis.complaintStatus === 'CLOSED';
+        const upsertedComplaint = {
+          complaintId: finalTicketId,
+          ticketId: finalTicketId,
+          phone,
+          name: existingForPhone?.name || 'وزارة الصحة',
+          senderPhone: phone,
+          senderName: existingForPhone?.senderName || 'وزارة الصحة',
+          status: analysis.complaintStatus || 'OPEN',
+          summary: analysis.summary || 'شكوى مكتشفة بواسطة الذكاء الاصطناعي',
+          category: analysis.category || 'أخرى',
+          draftReply: analysis.draftReply || '',
+          openDate: existingForPhone?.openDate || history[0]?.timestamp || new Date().toISOString(),
+          closeDate: isClosed ? (history[history.length - 1]?.timestamp || new Date().toISOString()) : null,
+          messageCount: mappedMessages.filter(m => !m.fromMe).length,
+          reminderCount: analysis.reminderCount || 0,
+          lastReminderDate: mappedMessages.filter(m => m.isReminder).pop()?.timestamp || null,
+          messages: mappedMessages,
+          lastAiScan: new Date().toISOString()
+        };
+
+        // Upsert into complaints cache
+        const allComplaints = loadComplaintsCache();
+        const filteredList = allComplaints.filter(c =>
+          !phoneNumbersMatch(c.phone || c.senderPhone || '', phone)
+        );
+        filteredList.push(upsertedComplaint);
+        saveComplaintsCache(filteredList);
+
+        detectedComplaints.push(upsertedComplaint);
+        logEvent(`✅ [AI Deep Scan] +${phone}: ${analysis.complaintStatus} complaint detected. Reminders: ${analysis.reminderCount}. ID: ${finalTicketId}`, 'info');
+
+      } else {
+        results.closed++;
+        // If AI says no active complaint but we have an open one, close it
+        if (existingForPhone && existingForPhone.status === 'OPEN') {
+          const allComplaints = loadComplaintsCache();
+          const target = allComplaints.find(c =>
+            phoneNumbersMatch(c.phone || c.senderPhone || '', phone) && c.status === 'OPEN'
+          );
+          if (target) {
+            target.status = 'CLOSED';
+            target.closeDate = new Date().toISOString();
+            target.lastAiScan = new Date().toISOString();
+            saveComplaintsCache(allComplaints);
+          }
+          logEvent(`🔄 [AI Deep Scan] +${phone}: AI determined complaint is CLOSED. Updated cache.`, 'info');
+        } else {
+          logEvent(`🔍 [AI Deep Scan] +${phone}: No active complaint detected by AI.`, 'info');
+        }
+      }
+
+      // Throttle Gemini calls to avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, 600));
+    } catch (err) {
+      results.failed++;
+      logEvent(`⚠️ [AI Deep Scan] Failed for +${phone}: ${err.message}`, 'error');
+    }
+  }
+
+  logEvent(`🏁 [AI Deep Scan] Complete. Total: ${phoneList.length}, Has Data: ${results.found}, Open Complaints: ${results.open}, Closed/None: ${results.closed}, No History: ${results.noData}, Errors: ${results.failed}`, 'info');
+
+  return {
+    totalScanned: phoneList.length,
+    withHistory: results.found,
+    openComplaints: results.open,
+    closedOrNone: results.closed,
+    noHistoryData: results.noData,
+    failedCount: results.failed,
+    detectedComplaints
   };
 }
 
@@ -1132,4 +1356,5 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations };
+
