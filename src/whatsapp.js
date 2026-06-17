@@ -573,9 +573,14 @@ async function connect() {
   sock.ev.on('creds.update', saveCreds);
   store.bind(sock.ev);
 
-  // Persist store to disk every 5 minutes and after every message upsert
-  setInterval(() => { try { store.writeToFile(STORE_FILE); } catch (_) {} }, 5 * 60 * 1000);
-  sock.ev.on('messages.upsert', () => { try { store.writeToFile(STORE_FILE); } catch (_) {} });
+  // Persist store to disk every 5 minutes and on key events (message upsert, history sync, chats sync)
+  const saveStore = () => { try { store.writeToFile(STORE_FILE); } catch (_) {} };
+  setInterval(saveStore, 5 * 60 * 1000);
+  sock.ev.on('messages.upsert', saveStore);
+  sock.ev.on('messaging-history.set', saveStore);
+  sock.ev.on('chats.set', saveStore);
+  sock.ev.on('chats.upsert', saveStore);
+  sock.ev.on('chats.update', saveStore);
 
   // ── Passive label events (fire if WA sends them — not guaranteed) ──────────
   sock.ev.on('labels.upsert', (labels) => {

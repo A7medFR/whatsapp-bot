@@ -884,6 +884,32 @@ app.post('/api/test/simulate-incoming', async (req, res) => {
 });
 
 /**
+ * GET /api/test/inspect-store
+ * Diagnostics endpoint to inspect what is inside the Baileys message store.
+ */
+app.get('/api/test/inspect-store', (req, res) => {
+  try {
+    const keys = wa.store && wa.store.messages ? Object.keys(wa.store.messages) : [];
+    const stats = keys.map(k => ({
+      jid: k,
+      messageCount: wa.store.messages[k] ? wa.store.messages[k].length : 0
+    }));
+    
+    // Sort so active chats are on top
+    stats.sort((a, b) => b.messageCount - a.messageCount);
+
+    res.json({
+      success: true,
+      totalChats: keys.length,
+      chatsWithMessages: stats.filter(c => c.messageCount > 0).length,
+      chats: stats
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/complaints/reconstruct
  * Reconstructs a complaint ticket for a phone number by reading and analyzing the chat history.
  */
