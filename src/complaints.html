@@ -714,6 +714,58 @@
     </div>
   </div>
 
+  <!-- Collapsible Simulator Panel -->
+  <div class="dashboard-panel" style="margin-bottom: 25px; padding: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleSimulator()">
+      <h3 style="font-size: 1.05rem; font-weight: 600; color: #93c5fd; display: flex; align-items: center; gap: 8px;">
+        ⚙️ Developer Tools: MOH Message Simulator
+      </h3>
+      <span id="simulator-toggle-icon" style="font-size: 0.9rem; color: var(--text-muted);">[ Show Controls ]</span>
+    </div>
+    <div id="simulator-body" style="display: none; margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
+        Use this tool to test the bot locally. Simulating an incoming message triggers the Gemini AI decision pipeline, increments reminder counts, and creates admin alerts.
+      </p>
+      <form id="sim-form" onsubmit="runSimulation(event)" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+        <div style="display: flex; flex-direction: column; gap: 6px; width: 150px;">
+          <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">MOH Phone</label>
+          <input type="text" id="sim-phone" class="search-input" style="width: 100%;" placeholder="e.g. 966501234567" required value="966500001234" />
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; width: 150px;">
+          <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Sender Name</label>
+          <input type="text" id="sim-name" class="search-input" style="width: 100%;" placeholder="e.g. وزارة الصحة" value="مفتش وزارة الصحة" />
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px;">
+          <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Message Content</label>
+          <input type="text" id="sim-message" class="search-input" style="width: 100%;" placeholder="Type message..." required value="تذكير: يرجى التجاوب وتزويدنا بالمستندات المطلوبة" />
+        </div>
+        <div style="display: flex; gap: 15px; padding-bottom: 8px;">
+          <label style="font-size: 0.78rem; display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-color);">
+            <input type="checkbox" id="sim-from-me" /> Outbound (Clinic)
+          </label>
+          <label style="font-size: 0.78rem; display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-color);">
+            <input type="checkbox" id="sim-attachment" /> Has Attachment
+          </label>
+        </div>
+        <button type="submit" class="btn btn-success" id="sim-submit-btn" style="padding: 10px 20px;">🚀 Trigger Simulation</button>
+      </form>
+
+      <div style="margin-top: 20px; border-top: 1px dashed var(--border-color); padding-top: 15px;">
+        <h4 style="font-size: 0.9rem; font-weight: 600; color: #93c5fd; margin-bottom: 8px;">🔍 Manual WhatsApp History Scanner</h4>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
+          Force-read the WhatsApp message history in the Baileys store for a specific phone number, reconstruct status, and count reminders.
+        </p>
+        <form id="reconstruct-form" onsubmit="runManualReconstruct(event)" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+          <div style="display: flex; flex-direction: column; gap: 6px; width: 220px;">
+            <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Phone Number to Sync</label>
+            <input type="text" id="recon-phone" class="search-input" style="width: 100%;" placeholder="e.g. 966500001234" required />
+          </div>
+          <button type="submit" class="btn btn-warning" id="recon-submit-btn" style="padding: 10px 20px;">🔄 Sync Chat History</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Complaints Tracker Panel -->
   <div class="dashboard-panel">
     <div class="panel-header">
@@ -727,6 +779,7 @@
           <option value="pending">Pending Review Only</option>
           <option value="closed">Closed Only</option>
         </select>
+        <button class="btn btn-success" onclick="syncAllChats(this)" id="btn-scan-all">🔍 Scan All MOH Chats</button>
         <button class="btn" onclick="fetchComplaints()" id="btn-refresh">🔄 Refresh</button>
       </div>
     </div>
@@ -739,6 +792,7 @@
             <th>AI Category</th>
             <th>AI Summary</th>
             <th>Messages Count</th>
+            <th style="text-align: center;">MOH Reminders</th>
             <th>Opened Date</th>
             <th>Duration</th>
             <th>Status</th>
@@ -907,7 +961,7 @@
       if (filtered.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="8" class="empty-state">
+            <td colspan="9" class="empty-state">
               <div class="empty-state-icon">📂</div>
               <p>No complaints matching search or filters found.</p>
             </td>
@@ -928,9 +982,34 @@
         }
 
         let actionsHtml = `<button class="btn btn-accent" onclick="openComplaintLogs('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem;">💬 Audit Log</button>`;
+        
+        actionsHtml += `<button class="btn btn-warning" onclick="syncComplaintHistory('${c.phone || c.senderPhone}', this)" style="padding: 5px 10px; font-size: 0.78rem;">🔄 Sync</button>`;
 
         if (c.status === 'OPEN') {
           actionsHtml += `<button class="btn btn-danger" onclick="closeComplaintTicket('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem;">Resolve</button>`;
+        }
+
+        const isTemp = c.isTemporary || (c.complaintId && (c.complaintId.startsWith('TEMP-') || c.complaintId.startsWith('complaint_')));
+        if (isTemp) {
+          actionsHtml += `<button class="btn btn-warning" onclick="promoteComplaintTicket('${c.complaintId}')" style="padding: 5px 10px; font-size: 0.78rem; border-color: rgba(245, 158, 11, 0.6); color: #fbbf24;">⚡ Promote</button>`;
+        }
+
+        const remindersCount = c.reminderCount || 0;
+        let remindersBadge = '';
+        if (remindersCount === 0) {
+          remindersBadge = `<span style="color: var(--text-muted); font-weight: 500;">0</span>`;
+        } else {
+          let lastRemTimeStr = '';
+          if (c.lastReminderDate) {
+            const timeAgo = formatDuration(c.lastReminderDate, c.status === 'CLOSED' ? c.closeDate : null);
+            lastRemTimeStr = `<div style="font-size: 0.72rem; color: #fca5a5; font-weight: 600; margin-top: 4px; letter-spacing: 0.3px;">⏰ ${timeAgo} ago</div>`;
+          }
+
+          if (remindersCount === 1) {
+            remindersBadge = `<div style="display: flex; flex-direction: column; align-items: center;"><span style="color: var(--accent-yellow); font-weight: bold; background: rgba(245, 158, 11, 0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.78rem;">⚠️ 1 Reminder</span>${lastRemTimeStr}</div>`;
+          } else {
+            remindersBadge = `<div style="display: flex; flex-direction: column; align-items: center;"><span style="color: var(--accent-red); font-weight: 800; background: rgba(239, 68, 68, 0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.3); animation: pulse-open 1.5s infinite ease-in-out; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 4px;">🚨 ${remindersCount} Reminders</span>${lastRemTimeStr}</div>`;
+          }
         }
 
         tr.innerHTML = `
@@ -941,6 +1020,7 @@
           <td style="font-weight: bold; color: var(--accent-green);">${c.category || 'أخرى'}</td>
           <td style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${c.summary || ''}">${c.summary || '-'}</td>
           <td style="font-weight: 700; text-align: center;">${c.messageCount}</td>
+          <td style="text-align: center;">${remindersBadge}</td>
           <td>${openTime}</td>
           <td>${formatDuration(c.openDate, c.closeDate)}</td>
           <td>${statusBadge}</td>
@@ -964,6 +1044,113 @@
         }
       } catch (err) {
         showToast('❌ Connection error.');
+      }
+    }
+
+    async function promoteComplaintTicket(complaintId) {
+      const officialId = prompt(`Enter the official MOH Ticket ID for this complaint:`, 'MOH-');
+      if (!officialId || officialId.trim() === '' || officialId === 'MOH-') return;
+
+      try {
+        const response = await fetch(`/api/complaints/${complaintId}/promote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ officialId: officialId.trim() })
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          showToast(`✅ Complaint successfully promoted to official ID: ${data.complaint.ticketId}`);
+          fetchComplaints();
+        } else {
+          showToast(`❌ Promotion failed: ${data.error || 'Server error'}`);
+        }
+      } catch (err) {
+        showToast('❌ Connection error during promotion.');
+      }
+    }
+
+    async function syncComplaintHistory(phone, btn) {
+      const originalText = btn.textContent;
+      btn.textContent = '🔄 Syncing...';
+      btn.disabled = true;
+
+      try {
+        const response = await fetch('/api/complaints/reconstruct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+          showToast(`✅ ${data.message}`);
+          fetchComplaints();
+        } else {
+          showToast(`❌ ${data.error || data.message || 'Failed to sync chat history.'}`);
+        }
+      } catch (err) {
+        showToast('❌ Connection error during sync.');
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    async function syncAllChats(btn) {
+      const originalText = btn.textContent;
+      btn.textContent = '🔍 Scanning...';
+      btn.disabled = true;
+
+      try {
+        const response = await fetch('/api/complaints/scan-all', { method: 'POST' });
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+          const res = data.result;
+          showToast(`🏁 Scan completed! Found ${res.successCount} active complaints, ${res.noComplaintCount} closed/none, ${res.failedCount} failed.`);
+          fetchComplaints();
+        } else {
+          showToast(`❌ ${data.error || 'Failed to scan history.'}`);
+        }
+      } catch (err) {
+        showToast('❌ Connection error during batch scan.');
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    async function runManualReconstruct(event) {
+      event.preventDefault();
+      const phoneInput = document.getElementById('recon-phone');
+      const submitBtn = document.getElementById('recon-submit-btn');
+      const phone = phoneInput.value.trim();
+      if (!phone) return;
+
+      const originalText = submitBtn.textContent;
+      submitBtn.textContent = '🔄 Syncing...';
+      submitBtn.disabled = true;
+
+      try {
+        const response = await fetch('/api/complaints/reconstruct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone })
+        });
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          showToast(`✅ ${data.message}`);
+          phoneInput.value = '';
+          fetchComplaints();
+        } else {
+          showToast(`❌ ${data.error || data.message || 'Failed to sync chat history.'}`);
+        }
+      } catch (err) {
+        showToast('❌ Connection error.');
+      } finally {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
       }
     }
 
@@ -1018,13 +1205,21 @@
             attachmentBadge = `<span class="bubble-attachment-badge">📎 Attachment File</span>`;
           }
 
+          let reminderBadge = '';
+          if (msg.isReminder) {
+            reminderBadge = `<span class="bubble-attachment-badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">🚨 Official MOH Reminder</span>`;
+          }
+
           bubble.innerHTML = `
             <div class="bubble-meta">
               <span style="font-weight: 600;">${senderLabel}</span>
               <span>${metaTime}</span>
             </div>
             <div class="bubble-text">${msg.text}</div>
-            ${attachmentBadge}
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;">
+              ${attachmentBadge}
+              ${reminderBadge}
+            </div>
           `;
           timeline.appendChild(bubble);
         });
@@ -1069,6 +1264,55 @@
       setTimeout(() => {
         toast.classList.remove('show');
       }, 3000);
+    }
+
+    function toggleSimulator() {
+      const body = document.getElementById('simulator-body');
+      const icon = document.getElementById('simulator-toggle-icon');
+      if (body.style.display === 'none') {
+        body.style.display = 'block';
+        icon.textContent = '[ Hide Controls ]';
+      } else {
+        body.style.display = 'none';
+        icon.textContent = '[ Show Controls ]';
+      }
+    }
+
+    async function runSimulation(e) {
+      e.preventDefault();
+      const phone = document.getElementById('sim-phone').value.trim();
+      const senderName = document.getElementById('sim-name').value.trim();
+      const messageText = document.getElementById('sim-message').value.trim();
+      const fromMe = document.getElementById('sim-from-me').checked;
+      const hasAttachment = document.getElementById('sim-attachment').checked;
+      const btn = document.getElementById('sim-submit-btn');
+
+      btn.disabled = true;
+      btn.textContent = '⚡ Processing...';
+
+      try {
+        const response = await fetch('/api/test/simulate-incoming', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, senderName, messageText, fromMe, hasAttachment })
+        });
+        
+        if (response.ok) {
+          showToast('✅ Simulated message processed successfully!');
+          document.getElementById('sim-message').value = ''; // clear message
+          document.getElementById('sim-from-me').checked = false;
+          document.getElementById('sim-attachment').checked = false;
+          fetchComplaints(); // reload database
+        } else {
+          const err = await response.json();
+          showToast('❌ Simulation failed: ' + (err.error || 'Server error'));
+        }
+      } catch (err) {
+        showToast('❌ Connection error during simulation.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Trigger Simulation';
+      }
     }
 
     // Initialize

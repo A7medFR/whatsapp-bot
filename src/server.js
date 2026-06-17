@@ -814,6 +814,123 @@ app.post('/api/complaints/:id/close', (req, res) => {
 
 
 /**
+ * POST /api/complaints/:id/promote
+ * Promotes a temporary complaint ID to an official MOH ticket ID.
+ */
+app.post('/api/complaints/:id/promote', (req, res) => {
+  const { id } = req.params;
+  const { officialId } = req.body;
+  if (!officialId) {
+    return res.status(400).json({ error: 'officialId body parameter is required.' });
+  }
+
+  try {
+    const updated = wa.promoteTemporaryComplaint(id, officialId);
+    if (updated) {
+      res.json({ success: true, message: `Complaint successfully promoted.`, complaint: updated });
+    } else {
+      res.status(404).json({ error: `Complaint with ID ${id} not found.` });
+    }
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/test/simulate-incoming
+ * Simulates an incoming message from an MOH official for local/pipeline testing.
+ */
+app.post('/api/test/simulate-incoming', async (req, res) => {
+  try {
+    const { phone, senderName, messageText, fromMe, hasAttachment } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: "phone is required for simulation." });
+    }
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    const messageContent = {};
+    if (hasAttachment) {
+      messageContent.documentMessage = {
+        title: 'resolution_proof.pdf',
+        caption: messageText || ''
+      };
+    } else {
+      messageContent.conversation = messageText || '';
+    }
+
+    const mockMsg = {
+      key: {
+        remoteJid: `${cleanPhone}@s.whatsapp.net`,
+        fromMe: !!fromMe,
+        id: `mock_sim_${Date.now()}`
+      },
+      pushName: senderName || (fromMe ? 'العيادة' : 'وزارة الصحة'),
+      message: messageContent
+    };
+
+    // Trigger pipeline asynchronously or await it
+    await wa.processMOHMessagePipeline(mockMsg, null);
+
+    res.json({
+      success: true,
+      message: "Simulation processed successfully.",
+      simulatedMessage: mockMsg
+    });
+  } catch (err) {
+    console.error("Simulation error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/complaints/reconstruct
+ * Reconstructs a complaint ticket for a phone number by reading and analyzing the chat history.
+ */
+app.post('/api/complaints/reconstruct', async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: 'phone parameter is required.' });
+    }
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    const reconstructed = await wa.reconstructComplaintFromHistory(cleanPhone);
+
+    res.json({
+      success: true,
+      message: reconstructed 
+        ? "Complaint reconstructed successfully from WhatsApp history." 
+        : "No active complaint was found in the conversation history.",
+      complaint: reconstructed
+    });
+  } catch (err) {
+    console.error("Reconstruct error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/complaints/scan-all
+ * Scans all candidate MOH contacts in the history and reconstructs active complaints.
+ */
+app.post('/api/complaints/scan-all', async (req, res) => {
+  try {
+    const result = await wa.scanAllMOHComplaints();
+    res.json({
+      success: true,
+      message: `Successfully completed history scanning. Scanned ${result.scannedCandidateCount} candidate numbers.`,
+      result
+    });
+  } catch (err) {
+    console.error("Scan all error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
+/**
  * POST /send-file
  * Body (multipart/form-data): phone, caption, files / file
  *

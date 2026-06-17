@@ -13,6 +13,7 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  makeInMemoryStore,
 } = require('@whiskeysockets/baileys');
 const pino   = require('pino');
 const qrcode = require('qrcode-terminal');
@@ -20,6 +21,8 @@ const fs     = require('fs');
 const path   = require('path');
 const { restoreSession } = require('./session');
 const geminiService = require('./geminiService');
+
+const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 function cleanAndNormalizePhone(phone) {
@@ -182,6 +185,30 @@ function closeComplaint(complaintId) {
   return false;
 }
 
+
+
+function promoteTemporaryComplaint(complaintId, officialId) {
+  const complaints = loadComplaintsCache();
+  
+  // Check if officialId is already in use by another ticket
+  const isDuplicate = complaints.some(c => (c.complaintId === officialId || c.ticketId === officialId) && c.complaintId !== complaintId);
+  if (isDuplicate) {
+    throw new Error(`The ticket ID ${officialId} is already in use by another complaint.`);
+  }
+
+  const complaint = complaints.find(c => c.complaintId === complaintId || c.ticketId === complaintId);
+  if (complaint) {
+    const oldId = complaint.complaintId || complaint.ticketId;
+    complaint.complaintId = officialId;
+    complaint.ticketId = officialId;
+    complaint.isTemporary = false;
+    saveComplaintsCache(complaints);
+    logEvent(`⚡ Temporary complaint ${oldId} promoted to official ID: ${officialId}`, 'info');
+    return complaint;
+  }
+  return null;
+}
+
 function hasAttachment(msg) {
   const m = msg?.message;
   if (!m) return false;
@@ -233,6 +260,10 @@ async function triggerAdminAlert(sock, text) {
     return;
   }
   logEvent(`📨 Forwarding emergency alert to admins: ${text}`, 'info');
+  if (!sock || !isReady) {
+    logEvent(`   ℹ️ [Offline/Simulation] Admin alert logged but not sent via WhatsApp (no active connection).`, 'info');
+    return;
+  }
   for (const num of FORWARD_NUMBERS) {
     try {
       await sock.sendMessage(`${num}@s.whatsapp.net`, { text });
@@ -251,6 +282,17 @@ async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shoul
     alertText += `📊 عدد الرسائل: ${counter}\n`;
   }
   alertText += `💬 الرسالة: ${text || '[ملف مرفق]'}`;
+  
+  await triggerAdminAlert(sock, alertText);
+}
+
+async function sendReminderAdminAlert(sock, phone, name, reminderCount, text) {
+  let alertText = `🚨 *تنبيه: تذكير شكوى من وزارة الصحة* 🚨\n\n` +
+                  `👤 *الاسم:* ${name}\n` +
+                  `📱 *الرقم:* +${phone}\n` +
+                  `💬 *رسالة التذكير:* "${text || '[ملف مرفق]'}"\n\n` +
+                  `⚠️ *عدد التذكيرات المسجلة:* ${reminderCount} ⚠️\n` +
+                  `💡 يرجى الرد على الشكوى وإغلاقها في أقرب وقت لتفادي المخالفات.`;
   
   await triggerAdminAlert(sock, alertText);
 }
@@ -281,7 +323,8 @@ async function processMOHMessagePipeline(msg, sock) {
           timestamp: new Date().toISOString(),
           text: text || '[ملف مرفق مرسل من العيادة - تم إغلاق الشكوى]',
           fromMe: true,
-          hasAttachment: true
+          hasAttachment: true,
+          isReminder: false
         });
         saveComplaintsCache(complaints);
         logEvent(`✅ Outbound attachment sent. Instantly CLOSED complaint ${target.complaintId || target.ticketId}.`, 'info');
@@ -328,29 +371,41 @@ async function processMOHMessagePipeline(msg, sock) {
       openDate: new Date().toISOString(),
       closeDate: null,
       messageCount: 1,
+      reminderCount: decision.isReminder ? 1 : 0,
+      lastReminderDate: decision.isReminder ? new Date().toISOString() : null,
       messages: [{
         timestamp: new Date().toISOString(),
         text: text || '[ملف مرفق]',
         fromMe: false,
-        hasAttachment: hasAtt
+        hasAttachment: hasAtt,
+        isReminder: !!decision.isReminder
       }]
     };
     complaints.push(newComplaint);
     saveComplaintsCache(complaints);
-    logEvent(`🚨 Gemini opened new complaint ${finalTicketId} for +${phone}`, 'info');
+    logEvent(`🚨 Gemini opened new complaint ${finalTicketId} for +${phone} (IsReminder: ${!!decision.isReminder})`, 'info');
 
     if (!fromMe) {
-      await sendAdminAlertWithCounter(sock, phone, newComplaint.name, 1, text, true);
+      if (decision.isReminder) {
+        await sendReminderAdminAlert(sock, phone, newComplaint.name, newComplaint.reminderCount, text);
+      } else {
+        await sendAdminAlertWithCounter(sock, phone, newComplaint.name, 1, text, true);
+      }
     }
   } 
   else if ((finalAction === 'INCREMENT' || finalAction === 'ROUTE_TO_COMPLAINT') && targetId) {
     const target = complaints.find(c => c.complaintId === targetId || c.ticketId === targetId);
     if (target) {
+      if (decision.isReminder && !fromMe) {
+        target.reminderCount = (target.reminderCount || 0) + 1;
+        target.lastReminderDate = new Date().toISOString();
+      }
       target.messages.push({
         timestamp: new Date().toISOString(),
         text: text || '[ملف مرفق]',
         fromMe,
-        hasAttachment: hasAtt
+        hasAttachment: hasAtt,
+        isReminder: !fromMe && !!decision.isReminder
       });
 
       if (!fromMe) {
@@ -362,10 +417,14 @@ async function processMOHMessagePipeline(msg, sock) {
       if (decision.draftReply) target.draftReply = decision.draftReply;
 
       saveComplaintsCache(complaints);
-      logEvent(`📥 Gemini routed message to complaint ${target.complaintId || target.ticketId} (Count: ${target.messageCount})`, 'info');
+      logEvent(`📥 Gemini routed message to complaint ${target.complaintId || target.ticketId} (Count: ${target.messageCount}, Reminders: ${target.reminderCount || 0})`, 'info');
 
       if (!fromMe) {
-        await sendAdminAlertWithCounter(sock, phone, target.name, target.messageCount, text, true);
+        if (decision.isReminder) {
+          await sendReminderAdminAlert(sock, phone, target.name, target.reminderCount || 1, text);
+        } else {
+          await sendAdminAlertWithCounter(sock, phone, target.name, target.messageCount, text, true);
+        }
       }
     }
   } 
@@ -378,7 +437,8 @@ async function processMOHMessagePipeline(msg, sock) {
         timestamp: new Date().toISOString(),
         text: text || (fromMe ? '[ملف مرفق مرسل من العيادة - تم إغلاق الشكوى]' : '[تم إغلاق الشكوى من قبل وزارة الصحة]'),
         fromMe,
-        hasAttachment: hasAtt
+        hasAttachment: hasAtt,
+        isReminder: false
       });
       saveComplaintsCache(complaints);
       logEvent(`✅ Gemini closed complaint ${target.complaintId || target.ticketId} based on message interaction.`, 'info');
@@ -388,7 +448,12 @@ async function processMOHMessagePipeline(msg, sock) {
     // IGNORE / NO_ACTION
     if (!fromMe) {
       // Forward general message to admin WITHOUT counter
-      await sendAdminAlertWithCounter(sock, phone, msg.pushName || 'وزارة الصحة', null, text, false);
+      if (decision.isReminder) {
+        // If somehow classified as reminder but action is IGNORE, still treat as reminder alert with count 1
+        await sendReminderAdminAlert(sock, phone, msg.pushName || 'وزارة الصحة', 1, text);
+      } else {
+        await sendAdminAlertWithCounter(sock, phone, msg.pushName || 'وزارة الصحة', null, text, false);
+      }
     }
   }
 }
@@ -474,6 +539,7 @@ async function connect() {
   });
 
   sock.ev.on('creds.update', saveCreds);
+  store.bind(sock.ev);
 
   // ── Passive label events (fire if WA sends them — not guaranteed) ──────────
   sock.ev.on('labels.upsert', (labels) => {
@@ -868,15 +934,197 @@ async function getMOHNumbersFromLabels() {
   return Array.from(phoneNumbers);
 }
 
+// ─── Get Chat History from Store ──────────────────────────────────────────────
+function getChatHistory(phone) {
+  const jid = `${phone}@s.whatsapp.net`;
+  const rawMessages = store.messages[jid] ? Array.from(store.messages[jid]) : [];
+  
+  return rawMessages
+    .map(msg => {
+      const text = getMessageText(msg);
+      const fromMe = !!msg.key?.fromMe;
+      const timestamp = msg.messageTimestamp 
+        ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
+        : new Date().toISOString();
+      return {
+        timestamp,
+        sender: fromMe ? 'Clinic' : 'MOH',
+        text: text,
+        hasAttachment: hasAttachment(msg)
+      };
+    })
+    .filter(m => m.text || m.hasAttachment)
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+}
+
+// ─── Reconstruct Complaint from History ───────────────────────────────────────
+async function reconstructComplaintFromHistory(phone) {
+  const history = getChatHistory(phone);
+  if (history.length === 0) {
+    throw new Error('No WhatsApp message history loaded for this phone number yet.');
+  }
+
+  const complaints = loadComplaintsCache();
+  const existingForPhone = complaints.filter(c => phoneNumbersMatch(c.phone || c.senderPhone || '', phone));
+  const activeComplaint = existingForPhone.find(c => c.status === 'OPEN');
+  
+  const analysis = await geminiService.analyzeChatHistory({
+    phone,
+    history,
+    activeTicketId: activeComplaint ? (activeComplaint.ticketId || activeComplaint.complaintId) : null
+  });
+
+  if (analysis && analysis.hasActiveComplaint) {
+    const finalTicketId = activeComplaint
+      ? (activeComplaint.ticketId || activeComplaint.complaintId)
+      : (analysis.extractedTicketId || `complaint_${phone}_${Math.floor(Date.now() / 1000)}`);
+      
+    const mappedMessages = history.map(h => {
+      const isReminder = h.sender === 'MOH' && (
+        /تذكير|أين الرد|متبقي الرد|الرجاء الرد|عاجل|عجلو بالرد|بانتظار الرد|reminder|urgent|please reply|reply needed/i.test(h.text || '')
+      );
+      return {
+        timestamp: h.timestamp,
+        text: h.text || '[ملف مرفق]',
+        fromMe: h.sender === 'Clinic',
+        hasAttachment: h.hasAttachment,
+        isReminder
+      };
+    });
+
+    const isClosed = analysis.complaintStatus === 'CLOSED';
+    
+    const reconstructed = {
+      complaintId: finalTicketId,
+      ticketId: finalTicketId,
+      phone,
+      name: activeComplaint?.name || 'وزارة الصحة',
+      senderPhone: phone,
+      senderName: activeComplaint?.senderName || 'وزارة الصحة',
+      status: analysis.complaintStatus || 'OPEN',
+      summary: analysis.summary || 'شكوى مستوردة',
+      category: analysis.category || 'أخرى',
+      draftReply: analysis.draftReply || '',
+      openDate: history[0]?.timestamp || new Date().toISOString(),
+      closeDate: isClosed ? (history[history.length - 1]?.timestamp || new Date().toISOString()) : null,
+      messageCount: mappedMessages.filter(m => !m.fromMe).length,
+      reminderCount: analysis.reminderCount || 0,
+      lastReminderDate: mappedMessages.filter(m => m.isReminder).pop()?.timestamp || null,
+      messages: mappedMessages
+    };
+
+    const cleanList = complaints.filter(c => !phoneNumbersMatch(c.phone || c.senderPhone || '', phone));
+    cleanList.push(reconstructed);
+    saveComplaintsCache(cleanList);
+
+    logEvent(`🔄 Reconstructed complaint ${finalTicketId} from chat history (+${phone}). Reminders: ${reconstructed.reminderCount}`, 'info');
+    return reconstructed;
+  } else {
+    if (activeComplaint) {
+      activeComplaint.status = 'CLOSED';
+      activeComplaint.closeDate = new Date().toISOString();
+      saveComplaintsCache(complaints);
+      logEvent(`🔄 Chat history scan determined no active complaint for +${phone}. Closed existing open ticket.`, 'info');
+    } else {
+      logEvent(`🔄 Chat history scan found no active complaint for +${phone}.`, 'info');
+    }
+    return null;
+  }
+}
+
+// ─── Scan All MOH Chats in Chat History ───────────────────────────────────────
+async function scanAllMOHComplaints() {
+  const phones = new Set();
+
+  // 1. Add labeled MOH numbers
+  try {
+    const labeledPhones = await getMOHNumbersFromLabels();
+    for (const p of labeledPhones) {
+      if (p) phones.add(p);
+    }
+  } catch (err) {
+    logEvent(`⚠️ Failed to retrieve labeled MOH numbers during scan: ${err.message}`, 'warn');
+  }
+
+  // 2. Add numbers from environment variables
+  if (Array.isArray(MOH_NUMBERS)) {
+    for (const p of MOH_NUMBERS) {
+      if (p) phones.add(p);
+    }
+  }
+
+  // 3. Add numbers from complaints cache
+  try {
+    const existingComplaints = loadComplaintsCache();
+    for (const c of existingComplaints) {
+      const p = c.phone || c.senderPhone;
+      if (p) {
+        const clean = p.replace(/\D/g, '');
+        if (clean) phones.add(clean);
+      }
+    }
+  } catch (err) {
+    logEvent(`⚠️ Failed to retrieve complaints from cache during scan: ${err.message}`, 'warn');
+  }
+
+  // 4. Add numbers that have messages in the store
+  if (store && store.messages) {
+    for (const jid of Object.keys(store.messages)) {
+      if (jid.endsWith('@s.whatsapp.net')) {
+        const phone = jid.split('@')[0];
+        const cleanPhone = phone.replace(/\D/g, '');
+        if (cleanPhone && !phone.includes('@lid')) {
+          phones.add(cleanPhone);
+        }
+      }
+    }
+  }
+
+  const phoneList = Array.from(phones);
+  logEvent(`🔍 Found ${phoneList.length} candidate numbers for scanning history.`, 'info');
+
+  const scannedCount = { success: 0, failed: 0, noComplaint: 0 };
+  const updatedComplaints = [];
+
+  for (const phone of phoneList) {
+    try {
+      const history = getChatHistory(phone);
+      if (history.length === 0) {
+        continue;
+      }
+      
+      const reconstructed = await reconstructComplaintFromHistory(phone);
+      if (reconstructed) {
+        scannedCount.success++;
+        updatedComplaints.push(reconstructed);
+      } else {
+        scannedCount.noComplaint++;
+      }
+      // Delay to avoid Gemini API rate limits
+      await new Promise(resolve => setTimeout(resolve, 250));
+    } catch (err) {
+      scannedCount.failed++;
+      logEvent(`⚠️ Scanning error for +${phone}: ${err.message}`, 'error');
+    }
+  }
+
+  logEvent(`🏁 Completed history scan. Reconstructed: ${scannedCount.success}, No Complaint/Closed: ${scannedCount.noComplaint}, Failed: ${scannedCount.failed}`, 'info');
+  return {
+    scannedCandidateCount: phoneList.length,
+    successCount: scannedCount.success,
+    failedCount: scannedCount.failed,
+    noComplaintCount: scannedCount.noComplaint,
+    complaints: updatedComplaints
+  };
+}
+
 // ─── Graceful Shutdown ────────────────────────────────────────────────────────
 async function disconnectGracefully() {
   if (sock) {
     logEvent('🔌 Closing WhatsApp socket connection gracefully...', 'info');
     try {
-      // Remove all connection update listeners to prevent auto-reconnect loops on exit
       sock.ev.removeAllListeners('connection.update');
       sock.end(undefined);
-      // Wait a moment for pending writes to flush
       await new Promise(r => setTimeout(r, 600));
     } catch (err) {
       console.error('Error closing WhatsApp socket:', err.message);
@@ -884,4 +1132,4 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints };
