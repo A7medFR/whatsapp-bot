@@ -647,7 +647,11 @@ async function connect() {
   loadChatLabelsCache();
   
   // Initialize persistent database and load complaints
-  await db.init();
+  try {
+    await db.init();
+  } catch (err) {
+    console.error('⚠️ [DB] Database initialization failed. Using local JSON fallback:', err.message);
+  }
   await initComplaintsStore();
 
   const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
