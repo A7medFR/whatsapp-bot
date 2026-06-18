@@ -410,17 +410,24 @@ async function triggerAdminAlert(sock, text, originalMsg = null) {
     return;
   }
   for (const num of FORWARD_NUMBERS) {
+    const recipientJid = `${num}@s.whatsapp.net`;
+    
+    // 1. Send the text alert
     try {
-      const recipientJid = resolveJid(num);
       await sock.sendMessage(recipientJid, { text });
       logEvent(`   ✅ Alert forwarded successfully to +${num}`, 'info');
-
-      if (originalMsg) {
-        await sock.sendMessage(recipientJid, { forward: originalMsg });
-        logEvent(`   ✅ Original message forwarded successfully to +${num}`, 'info');
-      }
     } catch (err) {
       logEvent(`   ❌ Alert forwarding failed to +${num}: ${err.message}`, 'error');
+    }
+
+    // 2. Forward the original message if provided
+    if (originalMsg) {
+      try {
+        await sock.sendMessage(recipientJid, { forward: originalMsg });
+        logEvent(`   ✅ Original message forwarded successfully to +${num}`, 'info');
+      } catch (err) {
+        logEvent(`   ❌ Original message forwarding failed to +${num}: ${err.message}`, 'error');
+      }
     }
   }
 }
