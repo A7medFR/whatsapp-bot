@@ -399,7 +399,7 @@ function getMessageText(msg) {
   return text;
 }
 
-async function triggerAdminAlert(sock, text) {
+async function triggerAdminAlert(sock, text, originalMsg = null) {
   if (FORWARD_NUMBERS.length === 0) {
     logEvent(`⚠️ Alert forwarding aborted: FORWARD_NUMBERS is empty in .env.`, 'warn');
     return;
@@ -411,15 +411,21 @@ async function triggerAdminAlert(sock, text) {
   }
   for (const num of FORWARD_NUMBERS) {
     try {
-      await sock.sendMessage(`${num}@s.whatsapp.net`, { text });
+      const recipientJid = resolveJid(num);
+      await sock.sendMessage(recipientJid, { text });
       logEvent(`   ✅ Alert forwarded successfully to +${num}`, 'info');
+
+      if (originalMsg) {
+        await sock.sendMessage(recipientJid, { forward: originalMsg });
+        logEvent(`   ✅ Original message forwarded successfully to +${num}`, 'info');
+      }
     } catch (err) {
       logEvent(`   ❌ Alert forwarding failed to +${num}: ${err.message}`, 'error');
     }
   }
 }
 
-async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shouldIncludeCounter = true) {
+async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shouldIncludeCounter = true, originalMsg = null) {
   let alertText = `🚨 رسالة جديدة واردة من وزارة الصحة\n` +
                   `📱 الرقم: +${phone}\n` +
                   `👤 الاسم: ${name}\n`;
@@ -428,10 +434,10 @@ async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shoul
   }
   alertText += `💬 الرسالة: ${text || '[ملف مرفق]'}`;
   
-  await triggerAdminAlert(sock, alertText);
+  await triggerAdminAlert(sock, alertText, originalMsg);
 }
 
-async function sendReminderAdminAlert(sock, phone, name, reminderCount, text) {
+async function sendReminderAdminAlert(sock, phone, name, reminderCount, text, originalMsg = null) {
   let alertText = `🚨 *تنبيه: تذكير شكوى من وزارة الصحة* 🚨\n\n` +
                   `👤 *الاسم:* ${name}\n` +
                   `📱 *الرقم:* +${phone}\n` +
@@ -439,7 +445,7 @@ async function sendReminderAdminAlert(sock, phone, name, reminderCount, text) {
                   `⚠️ *عدد مرات الارسال:* ${reminderCount} ⚠️\n` +
                   `💡 يرجى الرد على الشكوى وإغلاقها في أقرب وقت لتفادي المخالفات.`;
   
-  await triggerAdminAlert(sock, alertText);
+  await triggerAdminAlert(sock, alertText, originalMsg);
 }
 
 async function processMOHMessagePipeline(msg, sock) {
@@ -547,9 +553,9 @@ async function processMOHMessagePipeline(msg, sock) {
 
     if (!fromMe) {
       if (decision.isReminder) {
-        await sendReminderAdminAlert(sock, phone, newComplaint.name, newComplaint.reminderCount, text);
+        await sendReminderAdminAlert(sock, phone, newComplaint.name, newComplaint.reminderCount, text, msg);
       } else {
-        await sendAdminAlertWithCounter(sock, phone, newComplaint.name, 1, text, true);
+        await sendAdminAlertWithCounter(sock, phone, newComplaint.name, 1, text, true, msg);
       }
     }
   } 
@@ -585,9 +591,9 @@ async function processMOHMessagePipeline(msg, sock) {
 
       if (!fromMe) {
         if (decision.isReminder) {
-          await sendReminderAdminAlert(sock, phone, target.name, target.reminderCount || 1, text);
+          await sendReminderAdminAlert(sock, phone, target.name, target.reminderCount || 1, text, msg);
         } else {
-          await sendAdminAlertWithCounter(sock, phone, target.name, target.messageCount, text, true);
+          await sendAdminAlertWithCounter(sock, phone, target.name, target.messageCount, text, true, msg);
         }
       }
     }
@@ -614,9 +620,9 @@ async function processMOHMessagePipeline(msg, sock) {
       // Forward general message to admin WITHOUT counter
       if (decision.isReminder) {
         // If somehow classified as reminder but action is IGNORE, still treat as reminder alert with count 1
-        await sendReminderAdminAlert(sock, phone, msg.pushName || 'وزارة الصحة', 1, text);
+        await sendReminderAdminAlert(sock, phone, msg.pushName || 'وزارة الصحة', 1, text, msg);
       } else {
-        await sendAdminAlertWithCounter(sock, phone, msg.pushName || 'وزارة الصحة', null, text, false);
+        await sendAdminAlertWithCounter(sock, phone, msg.pushName || 'وزارة الصحة', null, text, false, msg);
       }
     }
   }
