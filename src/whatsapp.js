@@ -342,6 +342,18 @@ function updateManualComplaint(ticketId, data) {
   return c;
 }
 
+function deleteComplaint(complaintId) {
+  const complaints = loadComplaintsCache();
+  const index = complaints.findIndex(c => c.complaintId === complaintId || c.ticketId === complaintId);
+  if (index !== -1) {
+    complaints.splice(index, 1);
+    saveComplaintsCache(complaints);
+    logEvent(`❌ Complaint ${complaintId} deleted via Web UI Dashboard.`, 'info');
+    return true;
+  }
+  return false;
+}
+
 function hasAttachment(msg) {
   const m = msg?.message;
   if (!m) return false;
@@ -1507,5 +1519,5 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels, addManualComplaint, updateManualComplaint };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels, addManualComplaint, updateManualComplaint, deleteComplaint };
 

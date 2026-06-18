@@ -1055,6 +1055,20 @@ app.put('/api/complaints/:id', (req, res) => {
 });
 
 /**
+ * DELETE /api/complaints/:id
+ * Manually deletes a specific complaint by ID.
+ */
+app.delete('/api/complaints/:id', (req, res) => {
+  const { id } = req.params;
+  const success = wa.deleteComplaint(id);
+  if (success) {
+    res.json({ success: true, message: `Complaint ${id} successfully deleted.` });
+  } else {
+    res.status(404).json({ error: `Complaint with ID ${id} not found.` });
+  }
+});
+
+/**
  * POST /api/test/simulate-incoming
  * Simulates an incoming message from an MOH official for local/pipeline testing.
  */
