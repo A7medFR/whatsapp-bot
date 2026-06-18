@@ -94,7 +94,7 @@ Return ONLY a raw JSON structure matching this signature:
 `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-pro-preview',
+      model: 'gemini-2.5-pro',
       contents: prompt,
       config: {
         responseMimeType: 'application/json'
@@ -258,7 +258,7 @@ Return ONLY a raw JSON structure matching this signature:
 `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-pro-preview',
+      model: 'gemini-2.5-pro',
       contents: prompt,
       config: {
         responseMimeType: 'application/json'
