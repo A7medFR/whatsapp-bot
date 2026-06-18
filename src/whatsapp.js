@@ -21,6 +21,7 @@ const fs     = require('fs');
 const path   = require('path');
 const { restoreSession } = require('./session');
 const geminiService = require('./geminiService');
+const db = require('./db');
 
 const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
 const STORE_FILE = path.resolve('./baileys_store.json');
@@ -179,15 +180,35 @@ function saveChatLabelsCache() {
 const COMPLAINTS_FILE = path.resolve('./complaints_cache.json');
 let complaintsStore = [];
 
-function loadComplaintsCache() {
+async function initComplaintsStore() {
+  try {
+    const dbComplaints = await db.getComplaints();
+    if (dbComplaints && dbComplaints.length > 0) {
+      complaintsStore = dbComplaints;
+      console.log(`📋 Loaded ${complaintsStore.length} complaints from Database.`);
+      // Keep local JSON backup in sync
+      try {
+        fs.writeFileSync(COMPLAINTS_FILE, JSON.stringify(complaintsStore, null, 2), 'utf8');
+      } catch (_) {}
+      return;
+    }
+  } catch (err) {
+    console.error(`Failed to load complaints from database, falling back to local file: ${err.message}`);
+  }
+
+  // Fallback to local file
   try {
     if (fs.existsSync(COMPLAINTS_FILE)) {
       complaintsStore = JSON.parse(fs.readFileSync(COMPLAINTS_FILE, 'utf8')) || [];
-      console.log(`📋 Loaded ${complaintsStore.length} complaints from cache.`);
+      console.log(`📋 Loaded ${complaintsStore.length} complaints from local cache file.`);
     }
   } catch (err) {
-    console.error(`Failed to load complaints cache: ${err.message}`);
+    console.error(`Failed to load complaints cache from local file: ${err.message}`);
   }
+}
+
+function loadComplaintsCache() {
+  // Synchronous read of the in-memory array to maintain compatibility
   return complaintsStore;
 }
 
@@ -196,8 +217,12 @@ function saveComplaintsCache(list) {
   try {
     fs.writeFileSync(COMPLAINTS_FILE, JSON.stringify(complaintsStore, null, 2), 'utf8');
   } catch (err) {
-    console.error(`Failed to save complaints cache: ${err.message}`);
+    console.error(`Failed to save complaints cache to local file: ${err.message}`);
   }
+  // Sync to remote database asynchronously in the background
+  db.saveComplaints(complaintsStore).catch(err => {
+    console.error(`Failed to sync complaints to persistent database: ${err.message}`);
+  });
 }
 
 function getComplaintsStore() {
@@ -620,7 +645,10 @@ async function connect() {
   restoreSession();   // Restore session from WA_SESSION_B64 env var (Back4App / cloud)
   loadLabelCache();
   loadChatLabelsCache();
-  loadComplaintsCache();
+  
+  // Initialize persistent database and load complaints
+  await db.init();
+  await initComplaintsStore();
 
   const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
