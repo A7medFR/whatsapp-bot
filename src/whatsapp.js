@@ -34,8 +34,8 @@ function cleanAndNormalizePhone(phone) {
 }
 
 function phoneNumbersMatch(phone1, phone2) {
-  const p1 = phone1.replace(/\D/g, '');
-  const p2 = phone2.replace(/\D/g, '');
+  const p1 = formatJidNumber(phone1);
+  const p2 = formatJidNumber(phone2);
   if (!p1 || !p2) return false;
   if (p1 === p2) return true;
   // If both numbers are international/long enough (e.g. 9 or more digits), compare suffixes
@@ -141,7 +141,7 @@ const MOH_LABEL_ID   = (process.env.MOH_LABEL_ID    || '').trim();
 // Phone numbers of وزارة الصحة contacts (digits only, with country code)
 // The bot will notify admins whenever a message arrives from any of these numbers
 const MOH_NUMBERS = (process.env.MOH_NUMBERS || '')
-  .split(',').map(n => cleanAndNormalizePhone(n)).filter(Boolean);
+  .split(',').map(n => formatJidNumber(n)).filter(Boolean);
 
 const LABELS_FILE    = path.resolve('./labels_cache.json');
 const CHAT_LABELS_FILE = path.resolve('./chat_labels_cache.json');
