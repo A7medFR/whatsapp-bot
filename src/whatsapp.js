@@ -87,6 +87,49 @@ function resolveJid(phone) {
   return `${clean}@s.whatsapp.net`;
 }
 
+async function getCleanPhoneAndJid(jid, msg = null, socket = null) {
+  if (!jid) return { phone: '', jid: '' };
+  
+  let rawPhone = jid.split('@')[0].replace(/\D/g, '');
+  let resolvedJid = jid;
+  
+  // Try to resolve LID JIDs
+  if (jid.endsWith('@lid')) {
+    let resolved = null;
+    
+    // 1. Check message key alternatives if msg is provided
+    if (msg && msg.key) {
+      if (msg.key.senderPn && msg.key.senderPn.endsWith('@s.whatsapp.net')) {
+        resolved = msg.key.senderPn;
+      } else if (msg.key.remoteJidAlt && msg.key.remoteJidAlt.endsWith('@s.whatsapp.net')) {
+        resolved = msg.key.remoteJidAlt;
+      } else if (msg.key.participantAlt && msg.key.participantAlt.endsWith('@s.whatsapp.net')) {
+        resolved = msg.key.participantAlt;
+      }
+    }
+    
+    // 2. If prefix itself looks like a phone number (at least 9 digits)
+    if (!resolved && rawPhone.length >= 9) {
+      resolved = `${rawPhone}@s.whatsapp.net`;
+    }
+    
+    // 3. Fallback to Baileys LID mapping repository
+    if (!resolved && socket) {
+      try {
+        const pn = await socket.signalRepository?.lidMapping?.getPNForLID?.(jid);
+        if (pn) resolved = pn;
+      } catch (_) {}
+    }
+    
+    if (resolved) {
+      resolvedJid = resolved;
+      rawPhone = resolved.split('@')[0].replace(/\D/g, '');
+    }
+  }
+  
+  return { phone: rawPhone, jid: resolvedJid };
+}
+
 const FORWARD_NUMBERS = (process.env.FORWARD_NUMBERS || '')
   .split(',').map(n => formatJidNumber(n)).filter(Boolean);
 
@@ -459,7 +502,7 @@ async function processMOHMessagePipeline(msg, sock) {
   if (!msg.message) return;
 
   const remoteJid = msg.key.remoteJid;
-  const phone = remoteJid.split('@')[0];
+  const { phone, jid: resolvedJid } = await getCleanPhoneAndJid(remoteJid, msg, sock);
   const fromMe = msg.key.fromMe;
   
   const text = getMessageText(msg);
@@ -758,13 +801,22 @@ async function connect() {
       if (!a?.chatId || !a?.labelId) continue;
       
       const labelIdStr = String(a.labelId);
+      const cleanPhone = a.chatId.split('@')[0].replace(/\D/g, '');
+
       if (action === 'add') {
         if (!chatLabels[a.chatId]) chatLabels[a.chatId] = new Set();
         chatLabels[a.chatId].add(labelIdStr);
+        if (cleanPhone) {
+          if (!chatLabels[cleanPhone]) chatLabels[cleanPhone] = new Set();
+          chatLabels[cleanPhone].add(labelIdStr);
+        }
         changed = true;
         console.log(`🏷️ Label associated: Chat ${a.chatId} -> Label ID ${labelIdStr}`);
       } else if (action === 'remove') {
         chatLabels[a.chatId]?.delete(labelIdStr);
+        if (cleanPhone) {
+          chatLabels[cleanPhone]?.delete(labelIdStr);
+        }
         changed = true;
         console.log(`🏷️ Label disassociated: Chat ${a.chatId} -> Label ID ${labelIdStr}`);
       }
@@ -782,6 +834,10 @@ async function connect() {
       const labels = chat.labels || chat.label || [];
       if (!jid || !labels.length) continue;
       if (!chatLabels[jid]) chatLabels[jid] = new Set();
+
+      const cleanPhone = jid.split('@')[0].replace(/\D/g, '');
+      if (cleanPhone && !chatLabels[cleanPhone]) chatLabels[cleanPhone] = new Set();
+
       for (const lId of labels) {
         let idVal = null;
         if (typeof lId === 'string' || typeof lId === 'number') {
@@ -791,6 +847,7 @@ async function connect() {
         }
         if (idVal) {
           chatLabels[jid].add(idVal);
+          if (cleanPhone) chatLabels[cleanPhone].add(idVal);
           found++;
         }
       }
@@ -831,48 +888,18 @@ async function connect() {
       const sender = msg.key.remoteJid;
       if (!sender || sender.endsWith('@g.us')) continue;
 
-      const senderPhone = sender.replace('@s.whatsapp.net', '');
+      const { phone: senderPhone, jid: resolvedJid } = await getCleanPhoneAndJid(sender, msg, sock);
       const pushName    = msg.pushName || '';
-
-      // Resolve LID JIDs to Phone Numbers (PNs)
-      let resolvedPhone = null;
-      let resolvedJid = null;
-
-      if (msg.key?.senderPn && msg.key.senderPn.endsWith('@s.whatsapp.net')) {
-        resolvedJid = msg.key.senderPn;
-        resolvedPhone = resolvedJid.replace('@s.whatsapp.net', '');
-      } else if (msg.key?.remoteJidAlt && msg.key.remoteJidAlt.endsWith('@s.whatsapp.net')) {
-        resolvedJid = msg.key.remoteJidAlt;
-        resolvedPhone = resolvedJid.replace('@s.whatsapp.net', '');
-      } else if (msg.key?.participantAlt && msg.key.participantAlt.endsWith('@s.whatsapp.net')) {
-        resolvedJid = msg.key.participantAlt;
-        resolvedPhone = resolvedJid.replace('@s.whatsapp.net', '');
-      }
-
-      if (!resolvedPhone && sender.endsWith('@lid') && !msg.key.fromMe) {
-        try {
-          const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(sender);
-          if (pn) {
-            resolvedJid = pn;
-            resolvedPhone = pn.replace('@s.whatsapp.net', '');
-          }
-        } catch (lidErr) {
-          // Ignore lookup errors
-        }
-      }
 
       const mohLabelId = findLabelId(MOH_LABEL);
       const knownLabels = [
         ...(chatLabels[sender] || new Set()),
         ...(chatLabels[senderPhone] || new Set()),
         ...(resolvedJid ? (chatLabels[resolvedJid] || new Set()) : []),
-        ...(resolvedPhone ? (chatLabels[resolvedPhone] || new Set()) : []),
       ].map(String);
 
       const isMOHLabel    = mohLabelId && knownLabels.includes(String(mohLabelId));
-      const isMOHNumber   = MOH_NUMBERS.some(num => 
-        phoneNumbersMatch(senderPhone, num) || (resolvedPhone && phoneNumbersMatch(resolvedPhone, num))
-      );
+      const isMOHNumber   = MOH_NUMBERS.some(num => phoneNumbersMatch(senderPhone, num));
       
       const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || pushName.toLowerCase().includes('moh'));
       
@@ -1114,21 +1141,9 @@ async function getMOHNumbersFromLabels() {
 
   for (const [jid, labels] of Object.entries(chatLabels)) {
     if (labels && labels.has(mohLabelId)) {
-      let phone = jid.replace('@s.whatsapp.net', '').replace('@lid', '');
-      
-      // Try to resolve LID JIDs
-      if (jid.endsWith('@lid')) {
-        try {
-          const pn = await sock.signalRepository?.lidMapping?.getPNForLID?.(jid);
-          if (pn) {
-            phone = pn.replace('@s.whatsapp.net', '');
-          }
-        } catch (_) {}
-      }
-      
-      const cleanPhone = phone.replace(/\D/g, '');
-      if (cleanPhone) {
-        phoneNumbers.add(cleanPhone);
+      const { phone } = await getCleanPhoneAndJid(jid, null, sock);
+      if (phone) {
+        phoneNumbers.add(phone);
       }
     }
   }
@@ -1138,10 +1153,30 @@ async function getMOHNumbersFromLabels() {
 
 // ─── Get Chat History from Store ──────────────────────────────────────────────
 function getChatHistory(phone) {
-  const jid = resolveJid(phone);
-  const rawMessages = store.messages[jid] ? Array.from(store.messages[jid]) : [];
+  const clean = phone.replace(/\D/g, '');
+  const rawMessages = [];
   
-  const storeHistory = rawMessages
+  if (store && store.messages) {
+    for (const [jid, msgs] of Object.entries(store.messages)) {
+      const jidPhone = jid.split('@')[0].replace(/\D/g, '');
+      if (jidPhone === clean) {
+        rawMessages.push(...Array.from(msgs));
+      }
+    }
+  }
+
+  // Deduplicate messages by their key.id to avoid duplicates from merged JIDs
+  const seenIds = new Set();
+  const uniqueMessages = [];
+  for (const msg of rawMessages) {
+    if (msg?.key?.id) {
+      if (seenIds.has(msg.key.id)) continue;
+      seenIds.add(msg.key.id);
+    }
+    uniqueMessages.push(msg);
+  }
+  
+  const storeHistory = uniqueMessages
     .map(msg => {
       const text = getMessageText(msg);
       const fromMe = !!msg.key?.fromMe;
@@ -1316,8 +1351,8 @@ async function scanAllMOHComplaints() {
   if (store && store.messages) {
     for (const jid of Object.keys(store.messages)) {
       if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) {
-        const clean = jid.split('@')[0].replace(/\D/g, '');
-        if (clean && !cachePhones.has(clean)) newPhones.add(clean);
+        const { phone: clean } = await getCleanPhoneAndJid(jid, null, sock);
+        if (clean && clean.length >= 9 && !cachePhones.has(clean)) newPhones.add(clean);
       }
     }
   }
@@ -1401,8 +1436,8 @@ async function aiDeepScanMOHConversations() {
   if (store && store.messages) {
     for (const jid of Object.keys(store.messages)) {
       if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) {
-        const clean = jid.split('@')[0].replace(/\D/g, '');
-        if (clean) allPhones.add(clean);
+        const { phone: clean } = await getCleanPhoneAndJid(jid, null, sock);
+        if (clean && clean.length >= 9) allPhones.add(clean);
       }
     }
   }
