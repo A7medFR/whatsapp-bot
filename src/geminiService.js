@@ -68,11 +68,11 @@ ${JSON.stringify(existingComplaints.map(t => ({ ticketId: t.ticketId || t.compla
 - Is Outbound (From Clinic): ${isOutbound}
 
 ### Critical Decision Matrix Mandates:
-1. CREATE: Select if an MOH Officer (inbound) opens a brand new case, or sends a message describing a complaint. IMPORTANT: You MUST ONLY select CREATE if there are NO active open complaints in the Ledger Records (Active Open Complaints list is empty). If there is already an OPEN complaint, you MUST NOT select CREATE.
-2. INCREMENT: Select if an MOH Officer (inbound) follows up or provides data regarding one of the listed open tickets, OR if they send any message while a complaint is already active (since we only track one active complaint at a time). You MUST specify the exact targetTicketId matching the history (this could be the ticketId or complaintId).
-3. CLOSE: Select if Clinic Staff pushes an attachment file or explicitly indicates resolution. Specify the targetTicketId to lock down. If MOH (inbound) explicitly thanks the clinic and confirms closure, select CLOSE.
-4. IGNORE: Select if the message contains non-actionable elements like greetings ('شكرا', 'السلام عليكم', 'مرحبا') or trivial validation checks without any active complaint, or if the message is general talk and shouldn't alter any ticket.
-5. REMINDER DETECTION: Analyze if the new inbound message from MOH is a reminder/follow-up query demanding action or a response for a complaint (e.g. asking for status, asking "تذكير", "أين الرد؟", "يرجى الرد عاجلاً", "متبقي الرد", "لم يتم حلها بعد", "عجلوا بالإجراء", "reminder", "urgent reply needed", "reply status"). Set "isReminder" to true if the message is a reminder, otherwise false. Note: Outbound messages from the clinic can never be classified as reminders.
+1. CREATE: Select if an MOH Officer (inbound) sends any message when there are NO active open complaints in the Ledger Records (Active Open Complaints list is empty). Treat all inbound MOH messages as actionable, meaning you MUST NOT select IGNORE or CLOSE.
+2. INCREMENT: Select if an MOH Officer (inbound) sends any message while a complaint is already active in the Ledger Records. You MUST specify the targetTicketId of the open complaint. Treat all inbound MOH messages as actionable reminders, meaning you MUST NOT select IGNORE or CLOSE.
+3. CLOSE: Only select CLOSE if the message is OUTBOUND from the Clinic Staff pushing an attachment file or indicating resolution. Inbound messages from MOH should never trigger CLOSE or IGNORE.
+4. IGNORE: Only select IGNORE for OUTBOUND general text messages from the clinic. Inbound messages from MOH must never be ignored.
+5. REMINDER DETECTION: Treat all inbound messages from MOH as reminders (isReminder: true). Outbound messages from the clinic can never be classified as reminders.
 6. EXTRACT REMINDER NUMBER: If "isReminder" is true and the message specifies a particular reminder sequence number (e.g., "تذكير رقم 3", "تذكير 3", "التذكير الثالث", "تذكير ثاني", "تذكير رقم ٢"), extract that number as an integer and set "extractedReminderNumber". If no specific sequence number is declared in the text, set "extractedReminderNumber" to null.
 7. DRAFT REPLY ESCALATION: Adjust your drafted professional response in Arabic based on the reminderCount of the active complaint:
    - If reminderCount is 0: Draft a standard, polite acknowledgment in Arabic.

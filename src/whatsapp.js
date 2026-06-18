@@ -494,7 +494,22 @@ async function processMOHMessagePipeline(msg, sock) {
   const active = existingForPhone.find(c => c.status === 'OPEN');
   let finalAction = action;
 
-  if ((action === 'CREATE' || action === 'OPEN_COMPLAINT') && active) {
+  // Force all inbound messages from MOH to be treated as reminders/actionable follow-ups
+  if (!fromMe) {
+    decision.isReminder = true;
+    if (active) {
+      if (finalAction !== 'INCREMENT') {
+        logEvent(`⚠️ Inbound MOH message received but action was ${finalAction || 'empty'}. Overriding to INCREMENT on active complaint ${active.ticketId || active.complaintId}.`, 'warn');
+      }
+      finalAction = 'INCREMENT';
+      targetId = active.complaintId || active.ticketId;
+    } else {
+      if (finalAction !== 'CREATE') {
+        logEvent(`⚠️ Inbound MOH message received but action was ${finalAction || 'empty'}. Overriding to CREATE new complaint.`, 'warn');
+      }
+      finalAction = 'CREATE';
+    }
+  } else if ((action === 'CREATE' || action === 'OPEN_COMPLAINT') && active) {
     logEvent(`⚠️ Gemini suggested opening a new complaint, but overridden locally because complaint ${active.complaintId || active.ticketId} is already OPEN for +${phone}. Routing instead.`, 'warn');
     finalAction = 'INCREMENT';
     targetId = active.complaintId || active.ticketId;
