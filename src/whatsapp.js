@@ -907,6 +907,8 @@ async function connect() {
       const hasActiveComplaint = complaints.some(c => phoneNumbersMatch(c.phone || c.senderPhone || '', senderPhone) && c.status === 'OPEN');
       const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName || hasActiveComplaint;
 
+      logEvent(`📨 [Received message] from: +${senderPhone} (Name: "${pushName}"), isMOHNumber: ${isMOHNumber}, isMOHLabel: ${isMOHLabel}, isMOHPushName: ${isMOHPushName}, isMOH: ${isMOH}`, 'info');
+
       if (isMOH) {
         // Run state machine complaints tracker pipeline
         await processMOHMessagePipeline(msg, sock);
