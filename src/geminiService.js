@@ -73,7 +73,8 @@ ${JSON.stringify(existingComplaints.map(t => ({ ticketId: t.ticketId || t.compla
 3. CLOSE: Select if Clinic Staff pushes an attachment file or explicitly indicates resolution. Specify the targetTicketId to lock down. If MOH (inbound) explicitly thanks the clinic and confirms closure, select CLOSE.
 4. IGNORE: Select if the message contains non-actionable elements like greetings ('شكرا', 'السلام عليكم', 'مرحبا') or trivial validation checks without any active complaint, or if the message is general talk and shouldn't alter any ticket.
 5. REMINDER DETECTION: Analyze if the new inbound message from MOH is a reminder/follow-up query demanding action or a response for a complaint (e.g. asking for status, asking "تذكير", "أين الرد؟", "يرجى الرد عاجلاً", "متبقي الرد", "لم يتم حلها بعد", "عجلوا بالإجراء", "reminder", "urgent reply needed", "reply status"). Set "isReminder" to true if the message is a reminder, otherwise false. Note: Outbound messages from the clinic can never be classified as reminders.
-6. DRAFT REPLY ESCALATION: Adjust your drafted professional response in Arabic based on the reminderCount of the active complaint:
+6. EXTRACT REMINDER NUMBER: If "isReminder" is true and the message specifies a particular reminder sequence number (e.g., "تذكير رقم 3", "تذكير 3", "التذكير الثالث", "تذكير ثاني", "تذكير رقم ٢"), extract that number as an integer and set "extractedReminderNumber". If no specific sequence number is declared in the text, set "extractedReminderNumber" to null.
+7. DRAFT REPLY ESCALATION: Adjust your drafted professional response in Arabic based on the reminderCount of the active complaint:
    - If reminderCount is 0: Draft a standard, polite acknowledgment in Arabic.
    - If reminderCount is 1: Draft a polite acknowledgment requesting urgent response details from the department.
    - If reminderCount is >= 2: Draft a highly formal, urgent apology acknowledging their repeated reminders (e.g. "نعتذر بشدة عن التأخير في الرد على تذكيراتكم المتكررة..."), stating that the complaint has been escalated to senior clinic management, and outlining that resolution is being expedited.
@@ -82,6 +83,7 @@ Return ONLY a raw JSON structure matching this signature:
 {
   "action": "CREATE" | "INCREMENT" | "CLOSE" | "IGNORE",
   "isReminder": true | false,
+  "extractedReminderNumber": number | null,
   "targetTicketId": "The ticketId or complaintId to alter (String or null)",
   "extractedTicketId": "If a brand new ID is declared in the text, extract it natively as 'MOH-XXXX' (String or null)",
   "summary": "Concise 1-sentence Arabic description of the complaint (required for CREATE or INCREMENT)",
@@ -135,11 +137,30 @@ function getFallbackDecision({ phone, messageText, hasAttachment, isOutbound, ex
   ];
   const isReminder = !isOutbound && reminderKeywords.some(keyword => textLower.includes(keyword));
 
+  let extractedReminderNumber = null;
+  if (isReminder) {
+    const numMatch = (messageText || '').match(/تذكير\s*(?:رقم)?\s*(\d+)/i) || (messageText || '').match(/تذكير\s*([١٢٣٤٥٦٧٨٩٠]+)/);
+    if (numMatch) {
+      const parsedText = numMatch[1].replace(/[١-٩]/g, d => '123456789'['١٢٣٤٥٦٧٨٩'.indexOf(d)]);
+      const parsed = parseInt(parsedText, 10);
+      if (!isNaN(parsed)) extractedReminderNumber = parsed;
+    } else if (/ثاني|ثانٍ/i.test(messageText || '')) {
+      extractedReminderNumber = 2;
+    } else if (/ثالث/i.test(messageText || '')) {
+      extractedReminderNumber = 3;
+    } else if (/رابع/i.test(messageText || '')) {
+      extractedReminderNumber = 4;
+    } else if (/خامس/i.test(messageText || '')) {
+      extractedReminderNumber = 5;
+    }
+  }
+
   if (isOutbound) {
     if (hasAttachment && activeComplaint) {
       return {
         action: 'CLOSE',
         isReminder: false,
+        extractedReminderNumber: null,
         targetTicketId: activeTicketId,
         summary: activeComplaint.summary,
         category: activeComplaint.category,
@@ -147,18 +168,19 @@ function getFallbackDecision({ phone, messageText, hasAttachment, isOutbound, ex
         reasoning: 'Fallback: Outbound attachment detected, closing active complaint.'
       };
     }
-    return { action: 'IGNORE', isReminder: false, reasoning: 'Fallback: Outbound general text.' };
+    return { action: 'IGNORE', isReminder: false, extractedReminderNumber: null, reasoning: 'Fallback: Outbound general text.' };
   } else {
     // Inbound
     if (activeComplaint) {
       return {
         action: 'INCREMENT',
         isReminder: isReminder,
+        extractedReminderNumber: extractedReminderNumber,
         targetTicketId: activeTicketId,
         summary: activeComplaint.summary,
         category: activeComplaint.category,
         draftReply: 'تم استلام رسالتكم وجاري متابعتها مع القسم المختص.',
-        reasoning: `Fallback: Active complaint exists, routing follow-up. IsReminder=${isReminder}`
+        reasoning: `Fallback: Active complaint exists, routing follow-up. IsReminder=${isReminder}, ExtractedNumber=${extractedReminderNumber}`
       };
     }
 
@@ -166,17 +188,19 @@ function getFallbackDecision({ phone, messageText, hasAttachment, isOutbound, ex
       return {
         action: 'CREATE',
         isReminder: isReminder,
+        extractedReminderNumber: extractedReminderNumber,
         summary: 'شكوى جديدة',
         category: 'أخرى',
         draftReply: 'أهلاً بك، تم استلام رسالتكم وجاري فتح بطاقة شكوى للمتابعة.',
-        reasoning: `Fallback: New inbound message, opening complaint. IsReminder=${isReminder}`
+        reasoning: `Fallback: New inbound message, opening complaint. IsReminder=${isReminder}, ExtractedNumber=${extractedReminderNumber}`
       };
     }
 
     return {
       action: 'IGNORE',
       isReminder: isReminder,
-      reasoning: `Fallback: General short inbound text with no active complaint. IsReminder=${isReminder}`
+      extractedReminderNumber: extractedReminderNumber,
+      reasoning: `Fallback: General short inbound text with no active complaint. IsReminder=${isReminder}, ExtractedNumber=${extractedReminderNumber}`
     };
   }
 }

@@ -436,7 +436,7 @@ async function sendReminderAdminAlert(sock, phone, name, reminderCount, text) {
                   `👤 *الاسم:* ${name}\n` +
                   `📱 *الرقم:* +${phone}\n` +
                   `💬 *رسالة التذكير:* "${text || '[ملف مرفق]'}"\n\n` +
-                  `⚠️ *عدد التذكيرات المسجلة:* ${reminderCount} ⚠️\n` +
+                  `⚠️ *عدد مرات الارسال:* ${reminderCount} ⚠️\n` +
                   `💡 يرجى الرد على الشكوى وإغلاقها في أقرب وقت لتفادي المخالفات.`;
   
   await triggerAdminAlert(sock, alertText);
@@ -516,7 +516,7 @@ async function processMOHMessagePipeline(msg, sock) {
       openDate: new Date().toISOString(),
       closeDate: null,
       messageCount: 1,
-      reminderCount: decision.isReminder ? 1 : 0,
+      reminderCount: decision.isReminder ? (typeof decision.extractedReminderNumber === 'number' ? decision.extractedReminderNumber : 1) : 0,
       lastReminderDate: decision.isReminder ? new Date().toISOString() : null,
       messages: [{
         timestamp: new Date().toISOString(),
@@ -542,7 +542,11 @@ async function processMOHMessagePipeline(msg, sock) {
     const target = complaints.find(c => c.complaintId === targetId || c.ticketId === targetId);
     if (target) {
       if (decision.isReminder && !fromMe) {
-        target.reminderCount = (target.reminderCount || 0) + 1;
+        if (typeof decision.extractedReminderNumber === 'number') {
+          target.reminderCount = decision.extractedReminderNumber;
+        } else {
+          target.reminderCount = (target.reminderCount || 0) + 1;
+        }
         target.lastReminderDate = new Date().toISOString();
       }
       target.messages.push({
