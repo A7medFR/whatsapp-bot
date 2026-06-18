@@ -3,6 +3,7 @@
 const path = require('path');
 
 let activeDbType = null; // 'firestore' | 'mongodb' | 'postgres' | null
+let initError = null;
 
 // Firestore variables
 let firestoreDb = null;
@@ -41,6 +42,7 @@ async function init() {
       return;
     } catch (err) {
       console.error('❌ [DB] Failed to initialize Firebase Firestore:', err.message);
+      initError = err.message;
       throw err;
     }
   }
@@ -57,6 +59,7 @@ async function init() {
       return;
     } catch (err) {
       console.error('❌ [DB] Failed to initialize MongoDB:', err.message);
+      initError = err.message;
       throw err;
     }
   }
@@ -87,6 +90,7 @@ async function init() {
       return;
     } catch (err) {
       console.error('❌ [DB] Failed to initialize PostgreSQL:', err.message);
+      initError = err.message;
       throw err;
     }
   }
@@ -256,4 +260,12 @@ async function savePostgresComplaints(list) {
   }
 }
 
-module.exports = { init, getComplaints, saveComplaints };
+function getActiveDbType() {
+  return activeDbType;
+}
+
+function getInitError() {
+  return initError;
+}
+
+module.exports = { init, getComplaints, saveComplaints, getActiveDbType, getInitError };

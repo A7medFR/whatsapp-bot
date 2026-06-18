@@ -17,6 +17,7 @@ const QRCode = require('qrcode');
 const multer = require('multer');
 const wa = require('./whatsapp');
 const session = require('./session');
+const db = require('./db');
 const { buildGreeting, buildImageCaption, buildServicesText, buildCTA, buildAllOffersCTA } = require('./messageBuilder');
 
 // ─── Express setup ────────────────────────────────────────────────────────────
@@ -970,6 +971,17 @@ app.get('/complaints', (_req, res) => {
 app.get('/api/complaints', (_req, res) => {
   const list = wa.getComplaintsStore() || [];
   res.json({ count: list.length, complaints: list });
+});
+
+/**
+ * GET /api/test/db-status
+ * Diagnostics endpoint to inspect database connection type and status.
+ */
+app.get('/api/test/db-status', (_req, res) => {
+  res.json({
+    activeDatabase: db.getActiveDbType() || "local_json_fallback",
+    initError: db.getInitError()
+  });
 });
 
 /**
