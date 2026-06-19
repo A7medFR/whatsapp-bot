@@ -281,6 +281,7 @@ async function processMOHMessagePipeline(msg, sock) {
   const unwrapped = msg.message?.ephemeralMessage?.message ||
                     msg.message?.viewOnceMessage?.message ||
                     msg.message?.viewOnceMessageV2?.message ||
+                    msg.message?.documentWithCaptionMessage?.message ||
                     msg.message;
 
   const text = unwrapped?.conversation ||
@@ -291,14 +292,18 @@ async function processMOHMessagePipeline(msg, sock) {
 
   const hasAttachment = !!(msg.message.imageMessage ||
                            msg.message.documentMessage ||
+                           msg.message.documentWithCaptionMessage ||
                            msg.message.videoMessage ||
                            msg.message.audioMessage ||
                            msg.message.ephemeralMessage?.message?.imageMessage ||
                            msg.message.ephemeralMessage?.message?.documentMessage ||
+                           msg.message.ephemeralMessage?.message?.documentWithCaptionMessage ||
                            msg.message.viewOnceMessage?.message?.imageMessage ||
                            msg.message.viewOnceMessage?.message?.documentMessage ||
+                           msg.message.viewOnceMessage?.message?.documentWithCaptionMessage ||
                            msg.message.viewOnceMessageV2?.message?.imageMessage ||
-                           msg.message.viewOnceMessageV2?.message?.documentMessage);
+                           msg.message.viewOnceMessageV2?.message?.documentMessage ||
+                           msg.message.viewOnceMessageV2?.message?.documentWithCaptionMessage);
 
   let mediaBuffer = null;
   let mediaMimeType = null;
@@ -314,6 +319,7 @@ async function processMOHMessagePipeline(msg, sock) {
       const unwrappedMsg = msg.message.ephemeralMessage?.message || 
                            msg.message.viewOnceMessage?.message || 
                            msg.message.viewOnceMessageV2?.message || 
+                           msg.message.documentWithCaptionMessage?.message ||
                            msg.message;
       const imgMsg = unwrappedMsg.imageMessage;
       const docMsg = unwrappedMsg.documentMessage;
