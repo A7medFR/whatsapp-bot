@@ -37,11 +37,12 @@ if (!ai) {
  * @param {string} params.phone - The MOH contact phone number.
  * @param {string} params.messageText - The text content of the message.
  * @param {boolean} params.hasAttachment - Whether the message has an attachment (file or image from MOH).
+ * @param {object} params.attachment - Optional object containing { buffer, mimetype }
  * @param {boolean} params.isOutbound - True if sent by the clinic, false if sent by MOH.
  * @param {Array} params.existingComplaints - The historical complaints list for this phone number.
  * @returns {Promise<object>} The structured JSON action decision.
  */
-async function processMessageEvent({ phone, messageText, hasAttachment, isOutbound, existingComplaints }) {
+async function processMessageEvent({ phone, messageText, hasAttachment, attachment, isOutbound, existingComplaints }) {
   if (!ai) {
     if (global.logEvent) {
       global.logEvent('⚠️ GEMINI_API_KEY is missing. Using fallback rule engine.', 'warn');
@@ -109,9 +110,25 @@ Return ONLY a raw JSON object (no markdown, no explanation):
 }
 `;
 
+    let parts = [{ text: prompt }];
+
+    if (attachment && attachment.buffer && attachment.mimetype) {
+      if (attachment.mimetype.startsWith('image/') || attachment.mimetype === 'application/pdf') {
+        parts.push({
+          inlineData: {
+            data: attachment.buffer.toString("base64"),
+            mimeType: attachment.mimetype
+          }
+        });
+        if (global.logEvent) {
+          global.logEvent(`🤖 Attached media to Gemini prompt (${attachment.mimetype})`, 'info');
+        }
+      }
+    }
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
+      contents: parts,
       config: {
         responseMimeType: 'application/json'
       }

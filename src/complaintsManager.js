@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 
 // State configuration
 const COMPLAINTS_FILE = path.resolve('./complaints_cache.json');
@@ -293,6 +294,33 @@ async function processMOHMessagePipeline(msg, sock) {
                            msg.message.viewOnceMessageV2?.message?.imageMessage ||
                            msg.message.viewOnceMessageV2?.message?.documentMessage);
 
+  let mediaBuffer = null;
+  let mediaMimeType = null;
+
+  if (hasAttachment && sock && !fromMe) {
+    try {
+      mediaBuffer = await downloadMediaMessage(
+        msg,
+        'buffer',
+        { },
+        { logger: console }
+      );
+      const unwrappedMsg = msg.message.ephemeralMessage?.message || 
+                           msg.message.viewOnceMessage?.message || 
+                           msg.message.viewOnceMessageV2?.message || 
+                           msg.message;
+      const imgMsg = unwrappedMsg.imageMessage;
+      const docMsg = unwrappedMsg.documentMessage;
+      
+      if (imgMsg) mediaMimeType = imgMsg.mimetype;
+      else if (docMsg) mediaMimeType = docMsg.mimetype;
+      
+      logEvent(`📎 Downloaded media attachment: ${mediaMimeType}`, 'info');
+    } catch (err) {
+      logEvent(`⚠️ Failed to download media attachment: ${err.message}`, 'warn');
+    }
+  }
+
   let complaints = loadComplaintsCache();
   const existingForPhone = complaints.filter(c => phoneNumbersMatch(c.phone || c.senderPhone || '', phone));
   const active = existingForPhone.find(c => c.status === 'OPEN' || c.status === 'PENDING_REVIEW');
@@ -362,6 +390,7 @@ async function processMOHMessagePipeline(msg, sock) {
         phone,
         messageText: text,
         hasAttachment,
+        attachment: mediaBuffer ? { buffer: mediaBuffer, mimetype: mediaMimeType } : null,
         isOutbound: fromMe,
         existingComplaints: existingForPhone
       });
@@ -537,58 +566,13 @@ async function processMOHMessagePipeline(msg, sock) {
   }
   // ── Branch: OTHER ─────────────────────────────────────────────────────────────
   else {
-    logEvent(`ℹ️ [AI: OTHER] Message from +${phone} classified as OTHER — logging to ensure nothing is ignored.`, 'info');
-
-    if (active) {
-      active.messages.push({
-        timestamp: new Date().toISOString(),
-        text: text || '[ملف مرفق]',
-        fromMe: false,
-        hasAttachment,
-        isReminder: false,
-        messageType: 'OTHER'
-      });
-      saveComplaintsCache(complaints);
-      logEvent(`📝 [AI: OTHER] Appended to active ticket ${active.ticketId}.`, 'info');
-    } else {
-      const generalTicketId = `GENERAL_${phone}_${Math.floor(Date.now() / 1000)}`;
-      const generalTicket = {
-        complaintId: generalTicketId,
-        ticketId: generalTicketId,
-        phone,
-        name: pushName || 'وزارة الصحة',
-        senderPhone: phone,
-        senderName: pushName || 'وزارة الصحة',
-        status: 'OPEN',
-        summary: `رسالة عامة: ${(text || '').substring(0, 60)}`,
-        category: 'أخرى',
-        draftReply: '',
-        openDate: new Date().toISOString(),
-        closeDate: null,
-        messageCount: 1,
-        reminderCount: 0,
-        lastReminderDate: null,
-        messages: [{
-          timestamp: new Date().toISOString(),
-          text: text || '[ملف مرفق]',
-          fromMe: false,
-          hasAttachment,
-          isReminder: false,
-          messageType: 'OTHER'
-        }],
-        isTemporary: true
-      };
-      complaints.push(generalTicket);
-      saveComplaintsCache(complaints);
-      logEvent(`📋 [AI: OTHER] Created GENERAL log ticket ${generalTicketId} for +${phone}.`, 'info');
-    }
+    logEvent(`ℹ️ [AI: OTHER] Message from +${phone} classified as OTHER — forwarding directly without registering as complaint.`, 'info');
 
     if (triggerAdminAlertHelper) {
-      const alertText = `ℹ️ رسالة عامة واردة من جهة وزارة الصحة (تصنيف: أخرى)\n` +
+      const alertText = `ℹ️ ممثل الوزارة ارسل رسالة مفادها:\n` +
+                        `💬 ${text || '[ملف مرفق]'}\n\n` +
                         `📱 الرقم: +${phone}\n` +
-                        `👤 الاسم: ${pushName || 'وزارة الصحة'}\n` +
-                        `💬 الرسالة: ${text || '[ملف مرفق]'}\n` +
-                        `📌 ملاحظة: تم تسجيل الرسالة في النظام لضمان عدم إغفال أي تواصل.`;
+                        `👤 الاسم: ${pushName || 'وزارة الصحة'}`;
       await triggerAdminAlertHelper(alertText, msg);
     }
   }
