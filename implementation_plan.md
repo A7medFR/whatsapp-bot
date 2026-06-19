@@ -11,41 +11,36 @@ This document outlines a revised, highly structured design for detecting, counti
 
 ---
 
-## Revised System Architecture: Ticket-Based Tracking
+## Revised System Architecture: AI-Driven Ticket Tracking
 
-We will restructure the database and tracking rules to treat each complaint as a **distinct Ticket**.
+We will restructure the database and tracking rules to treat each complaint as a **distinct Ticket**, and use **Gemini AI** to read every message and classify it autonomously.
 
 ```mermaid
 graph TD
-    A[MOH Message In] --> B{Contains Ticket No?}
-    B -- Yes --> C{Ticket Status?}
-    C -- "Open" --> D[Increment Msg Counter for Ticket]
-    C -- "Closed/New" --> E[Create New Open Ticket]
-    
-    B -- No --> F{Active Ticket in Chat?}
-    F -- "Yes (Single)" --> G[Increment Msg Counter for Active Ticket]
-    F -- "Yes (Multiple)" --> H[Associate with Most Recent Active Ticket]
-    F -- "No" --> I{Contains Attachment?}
-    I -- Yes --> J[Create New Temporary Ticket]
-    I -- No --> K[General Message log - No Ticket]
+    A[MOH Message In] --> B[Pass to Gemini AI with Context]
+    B --> C{AI Classification}
+    C -- "New Complaint" --> D[Create New Open Ticket]
+    C -- "Reminder/Follow-up" --> E[Increment Message Counter for Active Ticket]
+    C -- "Another Message" --> F[Create/Append to a 'General' Ticket to Ensure Nothing is Ignored]
 ```
 
 ### 1. Database Schema (`complaints_cache.json`)
-Each complaint is recorded as a structured ticket:
+Each complaint/interaction is recorded as a structured ticket:
 ```json
 {
-  "ticketId": "MOH-123456",          // Explicit MOH Ticket number or generated ID (e.g. TEMP-96650-1718114)
+  "ticketId": "MOH-123456",          // Explicit MOH Ticket number or AI-generated ID
   "senderPhone": "966505190413",
   "senderName": "وزارة الصحة",
   "status": "OPEN",                  // OPEN, CLOSED
   "openDate": "2026-06-11T14:30:00.000Z",
   "closeDate": null,
-  "messageCount": 3,                 // Number of incoming MOH messages for this ticket
+  "messageCount": 3,                 // Number of incoming MOH messages (reminders/complaints)
   "closureAttachmentSent": false,    // Whether clinic sent a file to close this ticket
   "messages": [
     {
       "timestamp": "2026-06-11T14:30:00.000Z",
       "text": "بلاغ رقم 123456: مريض يشتكي...",
+      "classification": "NEW_COMPLAINT", // COMPLAINT, REMINDER, OTHER
       "fromMe": false,
       "hasAttachment": true
     }
@@ -55,23 +50,19 @@ Each complaint is recorded as a structured ticket:
 
 ---
 
-## Strict Rules for State Transition & Counter Detection
+## Strict Rules for State Transition & AI Classification
 
-### A. Detecting a New Complaint (Opening)
-A complaint is opened under two conditions:
-1. **Explicit Ticket Detection**: Any message from MOH containing a ticket regex match (e.g. `بلاغ\s*رقم\s*(\d+)` or `شكوى\s*رقم\s*(\d+)`). If that Ticket ID does not exist or is currently closed, a new **Open Ticket** is created.
-2. **Implicit Attachment Detection**: If the message has an attachment but no explicit ticket number is found:
-   - If there is no open ticket in the chat, the system opens a new ticket with a temporary ID (e.g., `TEMP-[phone]-[timestamp]`).
+### A. The AI Decision Engine
+Every incoming message from the MOH is passed to the Gemini AI model along with the current open tickets for that sender. The AI reads the content and returns a classification:
 
-### B. Message Counting (Monitoring)
-Every new message from MOH is matched to a ticket:
-1. If the message explicitly mentions an open Ticket ID (e.g., `123456`), we increment that ticket's counter.
-2. If the message has no Ticket ID, but there is exactly **one** open ticket for this sender, we increment that active ticket's counter.
-3. If no ticket is open and no attachment is present, the message is logged as general chat history and does not increment any complaint counter.
+1. **New Complaint (CREATE)**: If the MOH is opening a new case (e.g. explicitly says "بلاغ رقم X" or the AI detects a new issue). The system creates a new **Open Ticket**.
+2. **Reminder (INCREMENT)**: If the MOH is sending a reminder, follow-up, or asking for an update on an existing open ticket. The AI identifies which active ticket it belongs to, and increments its counter.
+3. **Another Message (OTHER)**: If the message is a greeting, general inquiry, or something else. Because **nothing should be ignored**, the AI will still log it. If it doesn't belong to a specific open ticket, a temporary ticket is created so the interaction is tracked and visible on the dashboard.
+4. **Direct Attachment from MOH (FILE/IMAGE)**: If the MOH directly sends a file or an image, the AI will immediately capture it. If the attachment is related to an active ticket, it increments the counter. If there are no active tickets or it represents a new issue, a **New Open Ticket** is created instantly, ensuring no documents or proofs from the MOH are ever missed.
 
-### C. Closing a Complaint
+### B. Closing a Complaint
 A ticket is closed in three structured ways:
-1. **Outgoing Attachment Match**: The clinic sends an attachment to the MOH contact. If there is an active open ticket for that chat, it is marked as closed.
+1. **Outgoing Attachment Match**: The clinic sends an attachment to the MOH contact. If there is an active open ticket for that chat, the AI will evaluate if this is a closure.
 2. **Explicit Admin Command**: Admin replies with `/close <TicketNo>` (e.g., `/close 123456`) or `/close` in the chat.
 3. **Web Dashboard Resolution**: The staff clicks "Resolve Complaint" on the `/complaints` dashboard.
 

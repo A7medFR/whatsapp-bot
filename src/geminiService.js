@@ -1,6 +1,7 @@
 /**
  * geminiService.js
  * Interfaces with Google Gemini API to analyze message intents,
+ * classify complaint types (NEW_COMPLAINT, REMINDER, OTHER),
  * route follow-up messages, categorize complaints, and draft responses.
  */
 
@@ -31,11 +32,11 @@ if (!ai) {
 
 /**
  * Process a message event and determine the correct system action.
- * 
+ *
  * @param {object} params
  * @param {string} params.phone - The MOH contact phone number.
  * @param {string} params.messageText - The text content of the message.
- * @param {boolean} params.hasAttachment - Whether the message has an attachment.
+ * @param {boolean} params.hasAttachment - Whether the message has an attachment (file or image from MOH).
  * @param {boolean} params.isOutbound - True if sent by the clinic, false if sent by MOH.
  * @param {Array} params.existingComplaints - The historical complaints list for this phone number.
  * @returns {Promise<object>} The structured JSON action decision.
@@ -49,52 +50,67 @@ async function processMessageEvent({ phone, messageText, hasAttachment, isOutbou
   }
 
   try {
-    const activeTickets = existingComplaints.filter(c => c.status === 'OPEN');
+    const activeTickets = existingComplaints.filter(c => c.status === 'OPEN' || c.status === 'PENDING_REVIEW');
 
     const prompt = `
 You are the AI supervisor for a medical clinic's WhatsApp bot that tracks Ministry of Health (MOH) regulatory complaints.
-Your job is to analyze a new message event (inbound from MOH, or outbound from Clinic) and decide the system action, mapping it to the correct complaint/ticket.
+Your job is to analyze a new message event (inbound from MOH) and extract semantic metadata to help the system process it.
+Note: Outbound messages from clinic staff are filtered by the system and never sent here.
 
 ### Ledger Records (Active Open Complaints for this Sender):
 ${JSON.stringify(activeTickets.map(t => ({ ticketId: t.ticketId || t.complaintId, status: t.status, summary: t.summary, messageCount: t.messageCount, reminderCount: t.reminderCount || 0 })), null, 2)}
 
-### History for this Sender:
-${JSON.stringify(existingComplaints.map(t => ({ ticketId: t.ticketId || t.complaintId, status: t.status, summary: t.summary })))}
-
-### Message Telemetry Layer:
+### Message Telemetry:
 - Phone: ${phone}
-- New Message: "${messageText || '[Media/Attachment File]'}"
-- Has Attachment: ${hasAttachment}
-- Is Outbound (From Clinic): ${isOutbound}
+- Message Text: "${messageText || '[No text — media/attachment only]'}"
+- Has Attachment (File or Image sent by MOH): ${hasAttachment}
 
-### Critical Decision Matrix Mandates:
-1. CREATE: Select if an MOH Officer (inbound) sends any message when there are NO active open complaints in the Ledger Records (Active Open Complaints list is empty). Treat all inbound MOH messages as actionable, meaning you MUST NOT select IGNORE or CLOSE.
-2. INCREMENT: Select if an MOH Officer (inbound) sends any message while a complaint is already active in the Ledger Records. You MUST specify the targetTicketId of the open complaint. Treat all inbound MOH messages as actionable reminders, meaning you MUST NOT select IGNORE or CLOSE.
-3. CLOSE: Only select CLOSE if the message is OUTBOUND from the Clinic Staff pushing an attachment file or indicating resolution. Inbound messages from MOH should never trigger CLOSE or IGNORE.
-4. IGNORE: Only select IGNORE for OUTBOUND general text messages from the clinic. Inbound messages from MOH must never be ignored.
-5. REMINDER DETECTION: Treat all inbound messages from MOH as reminders (isReminder: true). Outbound messages from the clinic can never be classified as reminders.
-6. EXTRACT REMINDER NUMBER: If "isReminder" is true and the message specifies a particular reminder sequence number (e.g., "تذكير رقم 3", "تذكير 3", "التذكير الثالث", "تذكير ثاني", "تذكير رقم ٢"), extract that number as an integer and set "extractedReminderNumber". If no specific sequence number is declared in the text, set "extractedReminderNumber" to null.
-7. DRAFT REPLY ESCALATION: Adjust your drafted professional response in Arabic based on the reminderCount of the active complaint:
-   - If reminderCount is 0: Draft a standard, polite acknowledgment in Arabic.
-   - If reminderCount is 1: Draft a polite acknowledgment requesting urgent response details from the department.
-   - If reminderCount is >= 2: Draft a highly formal, urgent apology acknowledging their repeated reminders (e.g. "نعتذر بشدة عن التأخير في الرد على تذكيراتكم المتكررة..."), stating that the complaint has been escalated to senior clinic management, and outlining that resolution is being expedited.
+### Classification & Extraction Rules:
 
-Return ONLY a raw JSON structure matching this signature:
+1. **MESSAGE TYPE** (CRITICAL — must be exactly one of three values):
+   - "NEW_COMPLAINT": The MOH is opening a brand new case. Use when:
+     * The message mentions an explicit ticket number not in the Ledger above (e.g., "بلاغ رقم 123456")
+     * The message describes a new patient complaint and there is NO open ticket in the Ledger
+     * The MOH sends an attachment/file/image and there is NO open ticket in the Ledger — always treat an incoming MOH attachment with no active ticket as a new complaint
+   - "REMINDER": The MOH is following up on an EXISTING case. Use when:
+     * Words like "تذكير", "أين الرد", "عاجل", "يرجى الرد", "بانتظار الإفادة", "reminder", "urgent"
+     * The message references a ticket that IS already in the Ledger above (open ticket exists)
+     * The MOH sends an attachment/file/image and an open ticket already EXISTS in the Ledger — treat as evidence for the existing case
+   - "OTHER": The message is clearly not a regulatory complaint or reminder. Examples:
+     * Pure greetings: "السلام عليكم", "مرحبا", "شكراً"
+     * Administrative pleasantries unrelated to any complaint
+     * IMPORTANT: Even OTHER messages get logged — they are NEVER silently discarded
+
+2. **TICKET ID EXTRACTION**: If the message explicitly mentions a ticket ID (e.g. "بلاغ رقم 123456", "شكوى رقم 987654"), extract the numeric ID and prefix it as "MOH-XXXX". Otherwise, return null.
+
+3. **IS REMINDER**: Set to true if messageType is "REMINDER", else false.
+
+4. **REMINDER SEQUENCE NUMBER**: If isReminder is true and the message specifies a sequence number (e.g., "تذكير رقم 3", "التذكير الثالث", "تذكير ثاني"), extract it as an integer. Otherwise return null.
+
+5. **COMPLAINT SUMMARY**: Concise 1-sentence Arabic summary of what the complaint is about.
+
+6. **CATEGORY**: One of: "أوقات الانتظار" | "سلوك الموظفين" | "الفواتير والأسعار" | "جودة العلاج" | "أخرى"
+
+7. **DRAFT REPLY**: Professional Arabic reply for clinic staff. Scale urgency by reminder count in Ledger:
+   - 0 reminders: Standard polite acknowledgment.
+   - 1 reminder: Urgently requesting internal department details to expedite.
+   - 2+ reminders: Formal apology for repeated follow-ups, escalation to senior management.
+
+Return ONLY a raw JSON object (no markdown, no explanation):
 {
-  "action": "CREATE" | "INCREMENT" | "CLOSE" | "IGNORE",
+  "messageType": "NEW_COMPLAINT" | "REMINDER" | "OTHER",
   "isReminder": true | false,
   "extractedReminderNumber": number | null,
-  "targetTicketId": "The ticketId or complaintId to alter (String or null)",
-  "extractedTicketId": "If a brand new ID is declared in the text, extract it natively as 'MOH-XXXX' (String or null)",
-  "summary": "Concise 1-sentence Arabic description of the complaint (required for CREATE or INCREMENT)",
-  "category": "Arabic classification (e.g., 'أوقات الانتظار', 'سلوك الموظفين', 'الفواتير والأسعار', 'جودة العلاج', 'أخرى')",
-  "draftReply": "A polite, professional response draft in Arabic addressing the MOH agent (optional)",
-  "reasoning": "Clear logical justification for the routing and reminder determination"
+  "extractedTicketId": "MOH-XXXX" | null,
+  "summary": "Arabic 1-sentence summary",
+  "category": "Arabic category",
+  "draftReply": "Arabic professional reply draft",
+  "reasoning": "Brief justification for the messageType decision"
 }
 `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-pro-preview',
+      model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json'
@@ -102,16 +118,23 @@ Return ONLY a raw JSON structure matching this signature:
     });
 
     const responseText = response.text;
-    const decision = JSON.parse(responseText);
+    const metadata = JSON.parse(responseText);
 
-    const logMsg = `🤖 [Gemini Decision]: Action=${decision.action}, IsReminder=${decision.isReminder}, Match=${decision.targetTicketId}, Reason=${decision.reasoning}`;
+    // Enforce consistency: isReminder must match messageType
+    if (metadata.messageType === 'REMINDER') {
+      metadata.isReminder = true;
+    } else {
+      metadata.isReminder = false;
+    }
+
+    const logMsg = `🤖 [Gemini]: Type=${metadata.messageType}, IsReminder=${metadata.isReminder}, Ticket=${metadata.extractedTicketId}, HasAttachment=${hasAttachment} | ${metadata.reasoning}`;
     if (global.logEvent) {
       global.logEvent(logMsg, 'info');
     } else {
       console.log(logMsg);
     }
-    
-    return decision;
+
+    return metadata;
   } catch (err) {
     const errorMsg = `❌ [Gemini Error]: ${err.message}`;
     if (global.logEvent) {
@@ -125,89 +148,85 @@ Return ONLY a raw JSON structure matching this signature:
 
 /**
  * Fallback rules engine if Gemini is not available or errors out.
+ * Mirrors the same classification logic (NEW_COMPLAINT / REMINDER / OTHER).
  */
 function getFallbackDecision({ phone, messageText, hasAttachment, isOutbound, existingComplaints }) {
-  const activeComplaint = existingComplaints.find(c => c.status === 'OPEN');
-  const activeTicketId = activeComplaint ? (activeComplaint.ticketId || activeComplaint.complaintId) : null;
-
+  const activeComplaint = existingComplaints.find(c => c.status === 'OPEN' || c.status === 'PENDING_REVIEW');
   const textLower = (messageText || '').toLowerCase();
+
   const reminderKeywords = [
     'تذكير', 'أين الرد', 'متبقي الرد', 'الرجاء الرد', 'عاجل', 'عجلو بالرد', 'بانتظار الرد',
     'reminder', 'urgent', 'please reply', 'reply needed', 'awaiting reply'
   ];
-  const isReminder = !isOutbound && reminderKeywords.some(keyword => textLower.includes(keyword));
+
+  const hasReminderKeyword = !isOutbound && reminderKeywords.some(keyword => textLower.includes(keyword));
+
+  // Fallback messageType classification
+  let messageType;
+  if (hasAttachment) {
+    // MOH sending a file/image: REMINDER if open ticket exists, NEW_COMPLAINT otherwise
+    messageType = activeComplaint ? 'REMINDER' : 'NEW_COMPLAINT';
+  } else if (hasReminderKeyword && activeComplaint) {
+    messageType = 'REMINDER';
+  } else if (hasReminderKeyword && !activeComplaint) {
+    // Reminder keyword but no open ticket — treat as a new complaint (can't remind about nothing)
+    messageType = 'NEW_COMPLAINT';
+  } else if (messageText && messageText.trim().length > 10) {
+    // Substantive text, no reminder keywords → new complaint or increment existing
+    messageType = activeComplaint ? 'REMINDER' : 'NEW_COMPLAINT';
+  } else {
+    // Short text, no attachment, no specific keywords → OTHER (still gets logged)
+    messageType = 'OTHER';
+  }
+
+  const isReminder = messageType === 'REMINDER';
 
   let extractedReminderNumber = null;
   if (isReminder) {
-    const numMatch = (messageText || '').match(/تذكير\s*(?:رقم)?\s*(\d+)/i) || (messageText || '').match(/تذكير\s*([١٢٣٤٥٦٧٨٩٠]+)/);
+    const numMatch = (messageText || '').match(/\u062a\u0630\u0643\u064a\u0631\s*(?:\u0631\u0642\u0645)?\s*(\d+)/i)
+      || (messageText || '').match(/\u062a\u0630\u0643\u064a\u0631\s*([\u0661-\u0669\u06f1-\u06f9]+)/);
     if (numMatch) {
-      const parsedText = numMatch[1].replace(/[١-٩]/g, d => '123456789'['١٢٣٤٥٦٧٨٩'.indexOf(d)]);
-      const parsed = parseInt(parsedText, 10);
+      const arabicToWestern = (s) => s.replace(/[\u0660-\u0669\u06f0-\u06f9]/g, d => d.charCodeAt(0) & 0xf);
+      const parsed = parseInt(arabicToWestern(numMatch[1]), 10);
       if (!isNaN(parsed)) extractedReminderNumber = parsed;
-    } else if (/ثاني|ثانٍ/i.test(messageText || '')) {
+    } else if (/\u062b\u0627\u0646\u064a|\u062b\u0627\u0646\u064d/i.test(messageText || '')) {
       extractedReminderNumber = 2;
-    } else if (/ثالث/i.test(messageText || '')) {
+    } else if (/\u062b\u0627\u0644\u062b/i.test(messageText || '')) {
       extractedReminderNumber = 3;
-    } else if (/رابع/i.test(messageText || '')) {
+    } else if (/\u0631\u0627\u0628\u0639/i.test(messageText || '')) {
       extractedReminderNumber = 4;
-    } else if (/خامس/i.test(messageText || '')) {
+    } else if (/\u062e\u0627\u0645\u0633/i.test(messageText || '')) {
       extractedReminderNumber = 5;
     }
   }
 
-  if (isOutbound) {
-    if (hasAttachment && activeComplaint) {
-      return {
-        action: 'CLOSE',
-        isReminder: false,
-        extractedReminderNumber: null,
-        targetTicketId: activeTicketId,
-        summary: activeComplaint.summary,
-        category: activeComplaint.category,
-        draftReply: '',
-        reasoning: 'Fallback: Outbound attachment detected, closing active complaint.'
-      };
-    }
-    return { action: 'IGNORE', isReminder: false, extractedReminderNumber: null, reasoning: 'Fallback: Outbound general text.' };
-  } else {
-    // Inbound
-    if (activeComplaint) {
-      return {
-        action: 'INCREMENT',
-        isReminder: isReminder,
-        extractedReminderNumber: extractedReminderNumber,
-        targetTicketId: activeTicketId,
-        summary: activeComplaint.summary,
-        category: activeComplaint.category,
-        draftReply: 'تم استلام رسالتكم وجاري متابعتها مع القسم المختص.',
-        reasoning: `Fallback: Active complaint exists, routing follow-up. IsReminder=${isReminder}, ExtractedNumber=${extractedReminderNumber}`
-      };
-    }
-
-    if (hasAttachment || textLower.length > 5) {
-      return {
-        action: 'CREATE',
-        isReminder: isReminder,
-        extractedReminderNumber: extractedReminderNumber,
-        summary: 'شكوى جديدة',
-        category: 'أخرى',
-        draftReply: 'أهلاً بك، تم استلام رسالتكم وجاري فتح بطاقة شكوى للمتابعة.',
-        reasoning: `Fallback: New inbound message, opening complaint. IsReminder=${isReminder}, ExtractedNumber=${extractedReminderNumber}`
-      };
-    }
-
-    return {
-      action: 'IGNORE',
-      isReminder: isReminder,
-      extractedReminderNumber: extractedReminderNumber,
-      reasoning: `Fallback: General short inbound text with no active complaint. IsReminder=${isReminder}, ExtractedNumber=${extractedReminderNumber}`
-    };
+  let draftReply = 'تم استلام رسالتكم وجاري متابعتها مع القسم المختص.';
+  const reminderCount = activeComplaint ? (activeComplaint.reminderCount || 0) : 0;
+  if (reminderCount >= 2) {
+    draftReply = 'نعتذر بشدة عن التأخير في الرد على تذكيراتكم المتكررة، وقد تم تصعيد الموضوع للإدارة العليا بالعيادة لإنهاء المتطلبات فوراً.';
+  } else if (reminderCount === 1) {
+    draftReply = 'نقر باستلام تذكيركم، ونود إفادتكم بأن الشكوى جاري العمل عليها بشكل عاجل حالياً.';
   }
+
+  const ticketRegex = /(?:\u0628\u0644\u0627\u063a\s*\u0631\u0642\u0645\s*|\u0634\u0643\u0648\u0649\s*\u0631\u0642\u0645\s*|\u0631\u0642\u0645\s*\u0627\u0644\u0628\u0644\u0627\u063a\s*)(\d+)/i;
+  const match = (messageText || '').match(ticketRegex);
+  const extractedTicketId = match ? `MOH-${match[1]}` : null;
+
+  return {
+    messageType,
+    isReminder,
+    extractedReminderNumber,
+    extractedTicketId,
+    summary: activeComplaint ? activeComplaint.summary : 'شكوى جديدة',
+    category: activeComplaint ? activeComplaint.category : 'أخرى',
+    draftReply: isOutbound ? '' : draftReply,
+    reasoning: `Fallback: Local heuristics. MessageType=${messageType}, HasAttachment=${hasAttachment}, HasReminderKeyword=${hasReminderKeyword}, ActiveTicket=${!!activeComplaint}.`
+  };
 }
 
 /**
  * Analyze chronological message history for a phone number and reconstruct the complaint status/details.
- * 
+ *
  * @param {object} params
  * @param {string} params.phone - Phone number.
  * @param {Array} params.history - List of simplified messages: [ { timestamp, sender, text, hasAttachment } ]
@@ -258,7 +277,7 @@ Return ONLY a raw JSON structure matching this signature:
 `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-pro-preview',
+      model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json'
@@ -274,7 +293,7 @@ Return ONLY a raw JSON structure matching this signature:
     } else {
       console.log(logMsg);
     }
-    
+
     return analysis;
   } catch (err) {
     const errorMsg = `❌ [Gemini History Scan Error]: ${err.message}`;
@@ -307,21 +326,18 @@ function getFallbackHistoryDecision({ phone, history, activeTicketId }) {
     };
   }
 
-  // Detect reminders using simple client-side keyword matches
   const reminderKeywords = [
     'تذكير', 'أين الرد', 'متبقي الرد', 'الرجاء الرد', 'عاجل', 'عجلو بالرد', 'بانتظار الرد',
     'reminder', 'urgent', 'please reply', 'reply needed', 'awaiting reply'
   ];
-  
-  const reminderCount = mohMessages.filter(m => 
+
+  const reminderCount = mohMessages.filter(m =>
     reminderKeywords.some(keyword => (m.text || '').toLowerCase().includes(keyword))
   ).length;
 
-  // If the last clinic message was an attachment, or if there is no open ticket, assume closed
-  // Otherwise, assume open
   const lastClinicMessage = clinicMessages[clinicMessages.length - 1];
   const hasOutboundAttachment = lastClinicMessage && lastClinicMessage.hasAttachment;
-  
+
   const status = hasOutboundAttachment ? 'CLOSED' : 'OPEN';
 
   let draftReply = 'تم استلام رسالتكم وجاري متابعتها مع القسم المختص.';
