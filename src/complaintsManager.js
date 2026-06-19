@@ -355,16 +355,6 @@ async function processMOHMessagePipeline(msg, sock) {
       });
       saveComplaintsCache(complaints);
       logEvent(`⚠️ Outbound attachment sent. Mutated complaint ${active.ticketId} status to PENDING_REVIEW.`, 'info');
-
-      if (sock && isReadyCallback()) {
-        try {
-          await sock.sendMessage(remoteJid, {
-            text: `⚠️ تم استلام الملف المرفق. تم تحويل بطاقة الشكوى (${active.ticketId}) إلى مرحلة المراجعة للتأكد من مطابقة شروط الإغلاق المعتمدة.`
-          });
-        } catch (err) {
-          logEvent(`Failed to send PENDING_REVIEW notice on WA: ${err.message}`, 'warn');
-        }
-      }
     } else {
       active.messages.push({
         timestamp: new Date().toISOString(),
@@ -478,15 +468,14 @@ async function processMOHMessagePipeline(msg, sock) {
     saveComplaintsCache(complaints);
     logEvent(`🚨 [AI: NEW_COMPLAINT] Opened ticket ${targetTicketId} for +${phone} (Attachment: ${hasAttachment}, Temp: ${isTemp})`, 'info');
 
-    if (sendAdminAlertWithCounterHelper) {
+    if (triggerAdminAlertHelper) {
       const attachmentNote = hasAttachment ? '📎 [مع ملف/صورة] ' : '';
-      const alertText = `🆕 ${attachmentNote}شكوى جديدة من وزارة الصحة\n` +
+      const alertText = `🚨 ${attachmentNote}شكوى جديدة من وزارة الصحة\n` +
                         `📱 الرقم: +${phone}\n` +
                         `👤 الاسم: ${pushName || 'وزارة الصحة'}\n` +
-                        `🎫 رقم البطاقة: ${targetTicketId}\n` +
                         `📊 عدد الرسائل: 1\n` +
                         `💬 الرسالة: ${text || '[ملف مرفق]'}`;
-      await sendAdminAlertWithCounterHelper(phone, pushName || 'وزارة الصحة', 1, alertText, false, msg);
+      await triggerAdminAlertHelper(alertText, msg);
     }
   }
   // ── Branch: REMINDER ─────────────────────────────────────────────────────────
