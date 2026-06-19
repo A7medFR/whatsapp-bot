@@ -22,6 +22,7 @@ const path   = require('path');
 const { restoreSession } = require('./session');
 const geminiService = require('./geminiService');
 const db = require('./db');
+const complaintsManager = require('./complaintsManager');
 
 const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
 const STORE_FILE = path.resolve('./baileys_store.json');
@@ -38,22 +39,28 @@ function phoneNumbersMatch(phone1, phone2) {
   const p2 = formatJidNumber(phone2);
   if (!p1 || !p2) return false;
   if (p1 === p2) return true;
-  // If both numbers are international/long enough (e.g. 9 or more digits), compare suffixes
-  if (p1.length >= 9 && p2.length >= 9) {
-    return p1.endsWith(p2) || p2.endsWith(p1);
+  // Suffix comparison for international numbers (handles country-code variations).
+  // We compare the last min(len1, len2, 9) digits to catch e.g. 201xxxxxxx vs 01xxxxxxx.
+  if (p1.length >= 7 && p2.length >= 7) {
+    const compareLen = Math.min(p1.length, p2.length, 10);
+    return p1.slice(-compareLen) === p2.slice(-compareLen);
   }
   return false;
 }
 
 function formatJidNumber(phone) {
-  let clean = phone.replace(/\D/g, '');
-  // If it starts with local Saudi prefix '05' (10 digits total), convert to international '9665...'
+  let clean = (phone || '').replace(/\D/g, '');
+  // Saudi local prefix '05XXXXXXXX' (10 digits) → '9665XXXXXXXX'
   if (clean.startsWith('05') && clean.length === 10) {
     clean = '966' + clean.slice(1);
   }
-  // If it's a mobile number without country code but has 9 digits (e.g. '5xxxxxxxx'), prepend '966'
+  // Saudi mobile without country code '5XXXXXXXX' (9 digits) → '9665XXXXXXXX'
   else if (clean.startsWith('5') && clean.length === 9) {
     clean = '966' + clean;
+  }
+  // Egyptian local '01XXXXXXXXX' (11 digits) → '2001XXXXXXXXX'
+  else if (clean.startsWith('01') && clean.length === 11) {
+    clean = '20' + clean;
   }
   return clean;
 }
@@ -175,6 +182,7 @@ function logEvent(message, level = 'info') {
     global.broadcastLog({ time, message: formatted, level });
   }
 }
+global.logEvent = logEvent;
 
 const getStatus = () => ({ connected: isReady, hasQR: !!qrString, qr: qrString });
 const getLabels = () => labelsStore;
@@ -220,181 +228,36 @@ function saveChatLabelsCache() {
 }
 
 // ─── Complaints Tracker State & Helpers ────────────────────────────────────────
-const COMPLAINTS_FILE = path.resolve('./complaints_cache.json');
-let complaintsStore = [];
-
-async function initComplaintsStore() {
-  try {
-    const dbComplaints = await db.getComplaints();
-    if (dbComplaints && dbComplaints.length > 0) {
-      complaintsStore = dbComplaints;
-      console.log(`📋 Loaded ${complaintsStore.length} complaints from Database.`);
-      // Keep local JSON backup in sync
-      try {
-        fs.writeFileSync(COMPLAINTS_FILE, JSON.stringify(complaintsStore, null, 2), 'utf8');
-      } catch (_) {}
-      return;
-    }
-  } catch (err) {
-    console.error(`Failed to load complaints from database, falling back to local file: ${err.message}`);
-  }
-
-  // Fallback to local file
-  try {
-    if (fs.existsSync(COMPLAINTS_FILE)) {
-      complaintsStore = JSON.parse(fs.readFileSync(COMPLAINTS_FILE, 'utf8')) || [];
-      console.log(`📋 Loaded ${complaintsStore.length} complaints from local cache file.`);
-    }
-  } catch (err) {
-    console.error(`Failed to load complaints cache from local file: ${err.message}`);
-  }
-}
-
 function loadComplaintsCache() {
-  // Synchronous read of the in-memory array to maintain compatibility
-  return complaintsStore;
+  return complaintsManager.loadComplaintsCache();
 }
 
 function saveComplaintsCache(list) {
-  if (list) complaintsStore = list;
-  try {
-    fs.writeFileSync(COMPLAINTS_FILE, JSON.stringify(complaintsStore, null, 2), 'utf8');
-  } catch (err) {
-    console.error(`Failed to save complaints cache to local file: ${err.message}`);
-  }
-  // Sync to remote database asynchronously in the background
-  db.saveComplaints(complaintsStore).catch(err => {
-    console.error(`Failed to sync complaints to persistent database: ${err.message}`);
-  });
+  return complaintsManager.saveComplaintsCache(list);
 }
 
 function getComplaintsStore() {
-  return complaintsStore;
+  return complaintsManager.getComplaintsStore();
 }
 
 function closeComplaint(complaintId) {
-  const complaints = loadComplaintsCache();
-  const complaint = complaints.find(c => c.complaintId === complaintId || c.ticketId === complaintId);
-  if (complaint) {
-    complaint.status = 'CLOSED';
-    complaint.closeDate = new Date().toISOString();
-    saveComplaintsCache(complaints);
-    logEvent(`✅ Complaint ${complaintId} resolved via Web UI Dashboard.`, 'info');
-    return true;
-  }
-  return false;
+  return complaintsManager.closeComplaint(complaintId);
 }
 
-
-
 function promoteTemporaryComplaint(complaintId, officialId) {
-  const complaints = loadComplaintsCache();
-  
-  // Check if officialId is already in use by another ticket
-  const isDuplicate = complaints.some(c => (c.complaintId === officialId || c.ticketId === officialId) && c.complaintId !== complaintId);
-  if (isDuplicate) {
-    throw new Error(`The ticket ID ${officialId} is already in use by another complaint.`);
-  }
-
-  const complaint = complaints.find(c => c.complaintId === complaintId || c.ticketId === complaintId);
-  if (complaint) {
-    const oldId = complaint.complaintId || complaint.ticketId;
-    complaint.complaintId = officialId;
-    complaint.ticketId = officialId;
-    complaint.isTemporary = false;
-    saveComplaintsCache(complaints);
-    logEvent(`⚡ Temporary complaint ${oldId} promoted to official ID: ${officialId}`, 'info');
-    return complaint;
-  }
-  return null;
+  return complaintsManager.promoteTemporaryComplaint(complaintId, officialId);
 }
 
 function addManualComplaint(data) {
-  const complaints = loadComplaintsCache();
-  const ticketId = (data.ticketId || '').trim() || `complaint_${data.phone}_${Math.floor(Date.now() / 1000)}`;
-  
-  // Check if ticketId already exists
-  const isDuplicate = complaints.some(c => c.ticketId === ticketId || c.complaintId === ticketId);
-  if (isDuplicate) {
-    throw new Error(`A complaint with ticket ID ${ticketId} already exists.`);
-  }
-
-  const cleanPhone = (data.phone || '').replace(/\D/g, '');
-  const newComplaint = {
-    complaintId: ticketId,
-    ticketId: ticketId,
-    phone: cleanPhone,
-    name: data.name || 'وزارة الصحة',
-    senderPhone: cleanPhone,
-    senderName: data.name || 'وزارة الصحة',
-    status: data.status || 'OPEN',
-    summary: data.summary || 'شكوى مدخلة يدوياً',
-    category: data.category || 'أخرى',
-    draftReply: data.draftReply || '',
-    openDate: data.openDate || new Date().toISOString(),
-    closeDate: data.status === 'CLOSED' ? (data.closeDate || new Date().toISOString()) : null,
-    messageCount: parseInt(data.messageCount, 10) || 0,
-    reminderCount: parseInt(data.reminderCount, 10) || 0,
-    messages: data.messages || [],
-    isTemporary: !!data.isTemporary
-  };
-
-  complaints.push(newComplaint);
-  saveComplaintsCache(complaints);
-  logEvent(`➕ Manually added complaint ${ticketId} for +${newComplaint.phone}`, 'info');
-  return newComplaint;
+  return complaintsManager.addManualComplaint(data);
 }
 
 function updateManualComplaint(ticketId, data) {
-  const complaints = loadComplaintsCache();
-  const index = complaints.findIndex(c => c.ticketId === ticketId || c.complaintId === ticketId);
-  if (index === -1) {
-    return null;
-  }
-
-  const c = complaints[index];
-  
-  if (data.phone) {
-    const clean = data.phone.replace(/\D/g, '');
-    c.phone = clean;
-    c.senderPhone = clean;
-  }
-  if (data.name) {
-    c.name = data.name;
-    c.senderName = data.name;
-  }
-  if (data.status) {
-    c.status = data.status;
-    if (data.status === 'CLOSED' && !c.closeDate) {
-      c.closeDate = new Date().toISOString();
-    } else if (data.status === 'OPEN') {
-      c.closeDate = null;
-    }
-  }
-  if (data.summary !== undefined) c.summary = data.summary;
-  if (data.category !== undefined) c.category = data.category;
-  if (data.draftReply !== undefined) c.draftReply = data.draftReply;
-  if (data.messageCount !== undefined) c.messageCount = parseInt(data.messageCount, 10) || 0;
-  if (data.reminderCount !== undefined) c.reminderCount = parseInt(data.reminderCount, 10) || 0;
-  
-  // If reminders count was increased manually, let's make sure the messages array has at least that many reminders
-  // we can append mock reminder messages if they want, but let's keep it simple.
-  
-  saveComplaintsCache(complaints);
-  logEvent(`✏️ Manually updated complaint ${ticketId}`, 'info');
-  return c;
+  return complaintsManager.updateManualComplaint(ticketId, data);
 }
 
 function deleteComplaint(complaintId) {
-  const complaints = loadComplaintsCache();
-  const index = complaints.findIndex(c => c.complaintId === complaintId || c.ticketId === complaintId);
-  if (index !== -1) {
-    complaints.splice(index, 1);
-    saveComplaintsCache(complaints);
-    logEvent(`❌ Complaint ${complaintId} deleted via Web UI Dashboard.`, 'info');
-    return true;
-  }
-  return false;
+  return complaintsManager.deleteComplaint(complaintId);
 }
 
 function hasAttachment(msg) {
@@ -498,184 +361,8 @@ async function sendReminderAdminAlert(sock, phone, name, reminderCount, text, or
   await triggerAdminAlert(sock, alertText, originalMsg);
 }
 
-async function processMOHMessagePipeline(msg, sock) {
-  if (!msg.message) return;
-
-  const remoteJid = msg.key.remoteJid;
-  const { phone, jid: resolvedJid } = await getCleanPhoneAndJid(remoteJid, msg, sock);
-  const fromMe = msg.key.fromMe;
-  
-  const text = getMessageText(msg);
-  const hasAtt = hasAttachment(msg);
-
-  let complaints = loadComplaintsCache();
-  const existingForPhone = complaints.filter(c => phoneNumbersMatch(c.phone || c.senderPhone || '', phone));
-
-  // Hardcoded Instant Close Rule:
-  // If we send an attachment file, it instantly changes the status to CLOSED, locking the counter.
-  if (fromMe && hasAtt) {
-    const active = existingForPhone.find(c => c.status === 'OPEN');
-    if (active) {
-      const target = complaints.find(c => c.complaintId === active.complaintId || c.ticketId === active.ticketId);
-      if (target) {
-        target.status = 'CLOSED';
-        target.closeDate = new Date().toISOString();
-        target.messages.push({
-          timestamp: new Date().toISOString(),
-          text: text || '[ملف مرفق مرسل من العيادة - تم إغلاق الشكوى]',
-          fromMe: true,
-          hasAttachment: true,
-          isReminder: false
-        });
-        saveComplaintsCache(complaints);
-        logEvent(`✅ Outbound attachment sent. Instantly CLOSED complaint ${target.complaintId || target.ticketId}.`, 'info');
-      }
-    }
-    return; // Done
-  }
-
-  // Invoke Gemini service to make the decision
-  const decision = await geminiService.processMessageEvent({
-    phone,
-    messageText: text,
-    hasAttachment: hasAtt,
-    isOutbound: fromMe,
-    existingComplaints: existingForPhone
-  });
-
-  const action = decision.action;
-  let targetId = decision.targetTicketId || decision.matchedComplaintId;
-
-  // Local State Safeguard: Force single active complaint check
-  const active = existingForPhone.find(c => c.status === 'OPEN');
-  let finalAction = action;
-
-  // Force all inbound messages from MOH to be treated as reminders/actionable follow-ups
-  if (!fromMe) {
-    decision.isReminder = true;
-    if (active) {
-      if (finalAction !== 'INCREMENT') {
-        logEvent(`⚠️ Inbound MOH message received but action was ${finalAction || 'empty'}. Overriding to INCREMENT on active complaint ${active.ticketId || active.complaintId}.`, 'warn');
-      }
-      finalAction = 'INCREMENT';
-      targetId = active.complaintId || active.ticketId;
-    } else {
-      if (finalAction !== 'CREATE') {
-        logEvent(`⚠️ Inbound MOH message received but action was ${finalAction || 'empty'}. Overriding to CREATE new complaint.`, 'warn');
-      }
-      finalAction = 'CREATE';
-    }
-  } else if ((action === 'CREATE' || action === 'OPEN_COMPLAINT') && active) {
-    logEvent(`⚠️ Gemini suggested opening a new complaint, but overridden locally because complaint ${active.complaintId || active.ticketId} is already OPEN for +${phone}. Routing instead.`, 'warn');
-    finalAction = 'INCREMENT';
-    targetId = active.complaintId || active.ticketId;
-  }
-
-  if (finalAction === 'CREATE' || finalAction === 'OPEN_COMPLAINT') {
-    const finalTicketId = decision.extractedTicketId || `complaint_${phone}_${Math.floor(Date.now() / 1000)}`;
-    const newComplaint = {
-      complaintId: finalTicketId,
-      ticketId: finalTicketId,
-      phone,
-      name: msg.pushName || 'وزارة الصحة',
-      senderPhone: phone,
-      senderName: msg.pushName || 'وزارة الصحة',
-      status: 'OPEN',
-      summary: decision.summary || 'شكوى جديدة',
-      category: decision.category || 'أخرى',
-      draftReply: decision.draftReply || '',
-      openDate: new Date().toISOString(),
-      closeDate: null,
-      messageCount: 1,
-      reminderCount: decision.isReminder ? (typeof decision.extractedReminderNumber === 'number' ? decision.extractedReminderNumber : 1) : 0,
-      lastReminderDate: decision.isReminder ? new Date().toISOString() : null,
-      messages: [{
-        timestamp: new Date().toISOString(),
-        text: text || '[ملف مرفق]',
-        fromMe: false,
-        hasAttachment: hasAtt,
-        isReminder: !!decision.isReminder
-      }]
-    };
-    complaints.push(newComplaint);
-    saveComplaintsCache(complaints);
-    logEvent(`🚨 Gemini opened new complaint ${finalTicketId} for +${phone} (IsReminder: ${!!decision.isReminder})`, 'info');
-
-    if (!fromMe) {
-      if (decision.isReminder) {
-        await sendReminderAdminAlert(sock, phone, newComplaint.name, newComplaint.reminderCount, text, msg);
-      } else {
-        await sendAdminAlertWithCounter(sock, phone, newComplaint.name, 1, text, true, msg);
-      }
-    }
-  } 
-  else if ((finalAction === 'INCREMENT' || finalAction === 'ROUTE_TO_COMPLAINT') && targetId) {
-    const target = complaints.find(c => c.complaintId === targetId || c.ticketId === targetId);
-    if (target) {
-      if (decision.isReminder && !fromMe) {
-        if (typeof decision.extractedReminderNumber === 'number') {
-          target.reminderCount = decision.extractedReminderNumber;
-        } else {
-          target.reminderCount = (target.reminderCount || 0) + 1;
-        }
-        target.lastReminderDate = new Date().toISOString();
-      }
-      target.messages.push({
-        timestamp: new Date().toISOString(),
-        text: text || '[ملف مرفق]',
-        fromMe,
-        hasAttachment: hasAtt,
-        isReminder: !fromMe && !!decision.isReminder
-      });
-
-      if (!fromMe) {
-        target.messageCount += 1;
-      }
-      
-      if (decision.summary) target.summary = decision.summary;
-      if (decision.category) target.category = decision.category;
-      if (decision.draftReply) target.draftReply = decision.draftReply;
-
-      saveComplaintsCache(complaints);
-      logEvent(`📥 Gemini routed message to complaint ${target.complaintId || target.ticketId} (Count: ${target.messageCount}, Reminders: ${target.reminderCount || 0})`, 'info');
-
-      if (!fromMe) {
-        if (decision.isReminder) {
-          await sendReminderAdminAlert(sock, phone, target.name, target.reminderCount || 1, text, msg);
-        } else {
-          await sendAdminAlertWithCounter(sock, phone, target.name, target.messageCount, text, true, msg);
-        }
-      }
-    }
-  } 
-  else if ((action === 'CLOSE' || action === 'CLOSE_COMPLAINT') && targetId) {
-    const target = complaints.find(c => c.complaintId === targetId || c.ticketId === targetId);
-    if (target) {
-      target.status = 'CLOSED';
-      target.closeDate = new Date().toISOString();
-      target.messages.push({
-        timestamp: new Date().toISOString(),
-        text: text || (fromMe ? '[ملف مرفق مرسل من العيادة - تم إغلاق الشكوى]' : '[تم إغلاق الشكوى من قبل وزارة الصحة]'),
-        fromMe,
-        hasAttachment: hasAtt,
-        isReminder: false
-      });
-      saveComplaintsCache(complaints);
-      logEvent(`✅ Gemini closed complaint ${target.complaintId || target.ticketId} based on message interaction.`, 'info');
-    }
-  } 
-  else {
-    // IGNORE / NO_ACTION
-    if (!fromMe) {
-      // Forward general message to admin WITHOUT counter
-      if (decision.isReminder) {
-        // If somehow classified as reminder but action is IGNORE, still treat as reminder alert with count 1
-        await sendReminderAdminAlert(sock, phone, msg.pushName || 'وزارة الصحة', 1, text, msg);
-      } else {
-        await sendAdminAlertWithCounter(sock, phone, msg.pushName || 'وزارة الصحة', null, text, false, msg);
-      }
-    }
-  }
+async function processMOHMessagePipeline(msg, socket) {
+  return await complaintsManager.processMOHMessagePipeline(msg, socket || sock);
 }
 
 
@@ -739,7 +426,19 @@ async function connect() {
   } catch (err) {
     console.error('⚠️ [DB] Database initialization failed. Using local JSON fallback:', err.message);
   }
-  await initComplaintsStore();
+  // Initialize complaints manager
+  await complaintsManager.init({
+    db,
+    geminiService,
+    logEvent,
+    isReady: () => isReady,
+    getChatHistory,
+    triggerAdminAlert: (text, originalMsg) => triggerAdminAlert(sock, text, originalMsg),
+    sendAdminAlertWithCounter: (phone, name, counter, text, shouldIncludeCounter, originalMsg) =>
+      sendAdminAlertWithCounter(sock, phone, name, counter, text, shouldIncludeCounter, originalMsg),
+    sendReminderAdminAlert: (phone, name, reminderCount, text, originalMsg) =>
+      sendReminderAdminAlert(sock, phone, name, reminderCount, text, originalMsg)
+  });
 
   const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -907,7 +606,7 @@ async function connect() {
       const hasActiveComplaint = complaints.some(c => phoneNumbersMatch(c.phone || c.senderPhone || '', senderPhone) && c.status === 'OPEN');
       const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName || hasActiveComplaint;
 
-      logEvent(`📨 [Received message] from: +${senderPhone} (Name: "${pushName}"), isMOHNumber: ${isMOHNumber}, isMOHLabel: ${isMOHLabel}, isMOHPushName: ${isMOHPushName}, isMOH: ${isMOH}`, 'info');
+      logEvent(`📨 [Received message] from: +${senderPhone} (Name: "${pushName}") | isMOHNumber: ${isMOHNumber}, isMOHLabel: ${isMOHLabel}, isMOHPushName: ${isMOHPushName}, hasActiveComplaint: ${hasActiveComplaint}, isMOH: ${isMOH} | MOH_NUMBERS loaded: [${MOH_NUMBERS.join(', ')}]`, 'info');
 
       if (isMOH) {
         // Run state machine complaints tracker pipeline
@@ -1214,364 +913,17 @@ function getChatHistory(phone) {
 
 // ─── Reconstruct Complaint from History ───────────────────────────────────────
 async function reconstructComplaintFromHistory(phone) {
-  const history = getChatHistory(phone);
-  if (history.length === 0) {
-    throw new Error('No WhatsApp message history loaded for this phone number yet.');
-  }
-
-  const complaints = loadComplaintsCache();
-  const existingForPhone = complaints.filter(c => phoneNumbersMatch(c.phone || c.senderPhone || '', phone));
-  const activeComplaint = existingForPhone.find(c => c.status === 'OPEN');
-  
-  const analysis = await geminiService.analyzeChatHistory({
-    phone,
-    history,
-    activeTicketId: activeComplaint ? (activeComplaint.ticketId || activeComplaint.complaintId) : null
-  });
-
-  if (analysis && analysis.hasActiveComplaint) {
-    const finalTicketId = activeComplaint
-      ? (activeComplaint.ticketId || activeComplaint.complaintId)
-      : (analysis.extractedTicketId || `complaint_${phone}_${Math.floor(Date.now() / 1000)}`);
-      
-    const mappedMessages = history.map(h => {
-      const isReminder = h.sender === 'MOH' && (
-        /تذكير|أين الرد|متبقي الرد|الرجاء الرد|عاجل|عجلو بالرد|بانتظار الرد|reminder|urgent|please reply|reply needed/i.test(h.text || '')
-      );
-      return {
-        timestamp: h.timestamp,
-        text: h.text || '[ملف مرفق]',
-        fromMe: h.sender === 'Clinic',
-        hasAttachment: h.hasAttachment,
-        isReminder
-      };
-    });
-
-    const isClosed = analysis.complaintStatus === 'CLOSED';
-    
-    const reconstructed = {
-      complaintId: finalTicketId,
-      ticketId: finalTicketId,
-      phone,
-      name: activeComplaint?.name || 'وزارة الصحة',
-      senderPhone: phone,
-      senderName: activeComplaint?.senderName || 'وزارة الصحة',
-      status: analysis.complaintStatus || 'OPEN',
-      summary: analysis.summary || 'شكوى مستوردة',
-      category: analysis.category || 'أخرى',
-      draftReply: analysis.draftReply || '',
-      openDate: history[0]?.timestamp || new Date().toISOString(),
-      closeDate: isClosed ? (history[history.length - 1]?.timestamp || new Date().toISOString()) : null,
-      messageCount: mappedMessages.filter(m => !m.fromMe).length,
-      reminderCount: analysis.reminderCount || 0,
-      lastReminderDate: mappedMessages.filter(m => m.isReminder).pop()?.timestamp || null,
-      messages: mappedMessages
-    };
-
-    const cleanList = complaints.filter(c => !phoneNumbersMatch(c.phone || c.senderPhone || '', phone));
-    cleanList.push(reconstructed);
-    saveComplaintsCache(cleanList);
-
-    logEvent(`🔄 Reconstructed complaint ${finalTicketId} from chat history (+${phone}). Reminders: ${reconstructed.reminderCount}`, 'info');
-    return reconstructed;
-  } else {
-    if (activeComplaint) {
-      activeComplaint.status = 'CLOSED';
-      activeComplaint.closeDate = new Date().toISOString();
-      saveComplaintsCache(complaints);
-      logEvent(`🔄 Chat history scan determined no active complaint for +${phone}. Closed existing open ticket.`, 'info');
-    } else {
-      logEvent(`🔄 Chat history scan found no active complaint for +${phone}.`, 'info');
-    }
-    return null;
-  }
+  return await complaintsManager.reconstructComplaintFromHistory(phone);
 }
 
 // ─── Scan All MOH Chats in Chat History ───────────────────────────────────────
 async function scanAllMOHComplaints() {
-  // ── Phase 1: Direct cache refresh (no Gemini needed) ──────────────────────
-  // For all contacts that ALREADY exist in complaints_cache.json, we update
-  // their reminder counts and message counts directly from the stored messages.
-  // This is the primary fix: cache-known contacts don't need the Baileys store.
-  const existingComplaints = loadComplaintsCache();
-  const updatedComplaints = [];
-  const cachePhones = new Set();
-
-  for (const c of existingComplaints) {
-    const phone = (c.phone || c.senderPhone || '').replace(/\D/g, '');
-    if (!phone) continue;
-    cachePhones.add(phone);
-
-    // Re-compute reminders and counts from stored messages array
-    const msgs = Array.isArray(c.messages) ? c.messages : [];
-    const inboundMsgs = msgs.filter(m => !m.fromMe);
-    const reminderMsgs = msgs.filter(m => !m.fromMe && m.isReminder);
-    const lastReminder = reminderMsgs.length > 0 ? reminderMsgs[reminderMsgs.length - 1].timestamp : null;
-
-    let changed = false;
-    if (c.messageCount !== inboundMsgs.length) { c.messageCount = inboundMsgs.length; changed = true; }
-    if (c.reminderCount !== reminderMsgs.length) { c.reminderCount = reminderMsgs.length; changed = true; }
-    if (c.lastReminderDate !== lastReminder) { c.lastReminderDate = lastReminder; changed = true; }
-
-    if (changed) {
-      logEvent(`🔄 [Scanner] Refreshed counts for ${c.complaintId || c.ticketId}: msgs=${c.messageCount}, reminders=${c.reminderCount}`, 'info');
-    }
-    updatedComplaints.push(c);
-  }
-
-  // Save refreshed cache
-  if (updatedComplaints.length > 0) {
-    saveComplaintsCache(updatedComplaints);
-  }
-
-  const scannedCount = { success: updatedComplaints.length, failed: 0, noComplaint: 0, geminiCalled: 0 };
-
-  // ── Phase 2: Discover new contacts via Baileys store + env + labels ────────
-  // Only call Gemini for phone numbers NOT already in the cache.
-  const newPhones = new Set();
-
-  // From env vars
-  if (Array.isArray(MOH_NUMBERS)) {
-    for (const p of MOH_NUMBERS) {
-      const clean = (p || '').replace(/\D/g, '');
-      if (clean && !cachePhones.has(clean)) newPhones.add(clean);
-    }
-  }
-
-  // From MOH label in chatLabels
-  try {
-    const labeledPhones = await getMOHNumbersFromLabels();
-    for (const p of labeledPhones) {
-      const clean = (p || '').replace(/\D/g, '');
-      if (clean && !cachePhones.has(clean)) newPhones.add(clean);
-    }
-  } catch (err) {
-    logEvent(`⚠️ Failed to retrieve labeled MOH numbers during scan: ${err.message}`, 'warn');
-  }
-
-  // From live Baileys store (messages received since last restart)
-  if (store && store.messages) {
-    for (const jid of Object.keys(store.messages)) {
-      if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) {
-        const { phone: clean } = await getCleanPhoneAndJid(jid, null, sock);
-        if (clean && clean.length >= 9 && !cachePhones.has(clean)) newPhones.add(clean);
-      }
-    }
-  }
-
-  logEvent(`🔍 [Scanner] Phase 1 refreshed ${scannedCount.success} cached complaints. Phase 2 found ${newPhones.size} new candidate(s) to check via Gemini.`, 'info');
-
-  for (const phone of newPhones) {
-    try {
-      const history = getChatHistory(phone);
-      if (history.length === 0) {
-        scannedCount.noComplaint++;
-        continue;
-      }
-      scannedCount.geminiCalled++;
-      const reconstructed = await reconstructComplaintFromHistory(phone);
-      if (reconstructed) {
-        scannedCount.success++;
-        updatedComplaints.push(reconstructed);
-      } else {
-        scannedCount.noComplaint++;
-      }
-      // Delay to avoid Gemini API rate limits
-      await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (err) {
-      scannedCount.failed++;
-      logEvent(`⚠️ Scanning error for +${phone}: ${err.message}`, 'error');
-    }
-  }
-
-  logEvent(`🏁 Completed history scan. Refreshed: ${scannedCount.success}, Gemini calls: ${scannedCount.geminiCalled}, No Complaint: ${scannedCount.noComplaint}, Failed: ${scannedCount.failed}`, 'info');
-  return {
-    scannedCandidateCount: existingComplaints.length + newPhones.size,
-    successCount: scannedCount.success,
-    failedCount: scannedCount.failed,
-    noComplaintCount: scannedCount.noComplaint,
-    complaints: updatedComplaints
-  };
+  return await complaintsManager.scanAllMOHComplaints(MOH_NUMBERS, getMOHNumbersFromLabels);
 }
 
 // ─── AI Deep Scan: Read Conversations & Detect Open Complaints ──────────────────
-/**
- * Collects ALL known MOH phone numbers, reads their full conversation history
- * (from the Baileys store or fallback to complaints cache), then sends every
- * conversation to Gemini AI to determine whether an open complaint exists,
- * how many reminders were sent, and the current status.
- *
- * Unlike scanAllMOHComplaints() which only refreshes counts from stored data,
- * this function makes Gemini re-read the raw messages and detect complaints
- * autonomously — even for phones not yet tracked in the cache.
- *
- * @returns {Promise<object>} Scan summary with detected complaints.
- */
 async function aiDeepScanMOHConversations() {
-  const allPhones = new Set();
-
-  // 1. MOH phones from environment variable
-  if (Array.isArray(MOH_NUMBERS)) {
-    for (const p of MOH_NUMBERS) {
-      const clean = (p || '').replace(/\D/g, '');
-      if (clean) allPhones.add(clean);
-    }
-  }
-
-  // 2. Phones from the MOH WhatsApp label (chatLabels map)
-  try {
-    const labeled = await getMOHNumbersFromLabels();
-    for (const p of labeled) {
-      const clean = (p || '').replace(/\D/g, '');
-      if (clean) allPhones.add(clean);
-    }
-  } catch (_) {}
-
-  // 3. Phones already in the complaints cache
-  const cachedComplaints = loadComplaintsCache();
-  for (const c of cachedComplaints) {
-    const p = (c.phone || c.senderPhone || '').replace(/\D/g, '');
-    if (p) allPhones.add(p);
-  }
-
-  // 4. Every phone that has messages in the live Baileys store
-  if (store && store.messages) {
-    for (const jid of Object.keys(store.messages)) {
-      if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) {
-        const { phone: clean } = await getCleanPhoneAndJid(jid, null, sock);
-        if (clean && clean.length >= 9) allPhones.add(clean);
-      }
-    }
-  }
-
-  const phoneList = Array.from(allPhones);
-  logEvent(`🧠 [AI Deep Scan] Starting Gemini conversation analysis for ${phoneList.length} MOH contact(s)...`, 'info');
-
-  const results = { found: 0, open: 0, closed: 0, noData: 0, failed: 0 };
-  const detectedComplaints = [];
-
-  for (const phone of phoneList) {
-    try {
-      // Get conversation history — from live store or fallback to cache messages
-      const history = getChatHistory(phone);
-
-      if (history.length === 0) {
-        logEvent(`🔍 [AI Deep Scan] No message history found for +${phone} — skipping.`, 'info');
-        results.noData++;
-        continue;
-      }
-
-      logEvent(`💬 [AI Deep Scan] Sending ${history.length} messages for +${phone} to Gemini...`, 'info');
-
-      // Find existing tracked complaint for this phone
-      const existingForPhone = cachedComplaints.find(c =>
-        phoneNumbersMatch(c.phone || c.senderPhone || '', phone)
-      );
-      const activeTicketId = existingForPhone
-        ? (existingForPhone.ticketId || existingForPhone.complaintId)
-        : null;
-
-      // Ask Gemini to analyze the full conversation
-      const analysis = await geminiService.analyzeChatHistory({
-        phone,
-        history,
-        activeTicketId
-      });
-
-      results.found++;
-
-      if (analysis && analysis.hasActiveComplaint) {
-        results.open++;
-
-        const finalTicketId = existingForPhone
-          ? (existingForPhone.ticketId || existingForPhone.complaintId)
-          : (analysis.extractedTicketId || `complaint_${phone}_${Math.floor(Date.now() / 1000)}`);
-
-        // Map raw history into stored message format
-        const mappedMessages = history.map(h => {
-          const isReminder = h.sender === 'MOH' && (
-            /تذكير|أين الرد|متبقي الرد|الرجاء الرد|عاجل|عجلو بالرد|بانتظار الرد|reminder|urgent|please reply|reply needed/i.test(h.text || '')
-          );
-          return {
-            timestamp: h.timestamp,
-            text: h.text || '[ملف مرفق]',
-            fromMe: h.sender === 'Clinic',
-            hasAttachment: h.hasAttachment,
-            isReminder
-          };
-        });
-
-        const isClosed = analysis.complaintStatus === 'CLOSED';
-        const upsertedComplaint = {
-          complaintId: finalTicketId,
-          ticketId: finalTicketId,
-          phone,
-          name: existingForPhone?.name || 'وزارة الصحة',
-          senderPhone: phone,
-          senderName: existingForPhone?.senderName || 'وزارة الصحة',
-          status: analysis.complaintStatus || 'OPEN',
-          summary: analysis.summary || 'شكوى مكتشفة بواسطة الذكاء الاصطناعي',
-          category: analysis.category || 'أخرى',
-          draftReply: analysis.draftReply || '',
-          openDate: existingForPhone?.openDate || history[0]?.timestamp || new Date().toISOString(),
-          closeDate: isClosed ? (history[history.length - 1]?.timestamp || new Date().toISOString()) : null,
-          messageCount: mappedMessages.filter(m => !m.fromMe).length,
-          reminderCount: analysis.reminderCount || 0,
-          lastReminderDate: mappedMessages.filter(m => m.isReminder).pop()?.timestamp || null,
-          messages: mappedMessages,
-          lastAiScan: new Date().toISOString()
-        };
-
-        // Upsert into complaints cache
-        const allComplaints = loadComplaintsCache();
-        const filteredList = allComplaints.filter(c =>
-          !phoneNumbersMatch(c.phone || c.senderPhone || '', phone)
-        );
-        filteredList.push(upsertedComplaint);
-        saveComplaintsCache(filteredList);
-
-        detectedComplaints.push(upsertedComplaint);
-        logEvent(`✅ [AI Deep Scan] +${phone}: ${analysis.complaintStatus} complaint detected. Reminders: ${analysis.reminderCount}. ID: ${finalTicketId}`, 'info');
-
-      } else {
-        results.closed++;
-        // If AI says no active complaint but we have an open one, close it
-        if (existingForPhone && existingForPhone.status === 'OPEN') {
-          const allComplaints = loadComplaintsCache();
-          const target = allComplaints.find(c =>
-            phoneNumbersMatch(c.phone || c.senderPhone || '', phone) && c.status === 'OPEN'
-          );
-          if (target) {
-            target.status = 'CLOSED';
-            target.closeDate = new Date().toISOString();
-            target.lastAiScan = new Date().toISOString();
-            saveComplaintsCache(allComplaints);
-          }
-          logEvent(`🔄 [AI Deep Scan] +${phone}: AI determined complaint is CLOSED. Updated cache.`, 'info');
-        } else {
-          logEvent(`🔍 [AI Deep Scan] +${phone}: No active complaint detected by AI.`, 'info');
-        }
-      }
-
-      // Throttle Gemini calls to avoid rate limits
-      await new Promise(resolve => setTimeout(resolve, 600));
-    } catch (err) {
-      results.failed++;
-      logEvent(`⚠️ [AI Deep Scan] Failed for +${phone}: ${err.message}`, 'error');
-    }
-  }
-
-  logEvent(`🏁 [AI Deep Scan] Complete. Total: ${phoneList.length}, Has Data: ${results.found}, Open Complaints: ${results.open}, Closed/None: ${results.closed}, No History: ${results.noData}, Errors: ${results.failed}`, 'info');
-
-  return {
-    totalScanned: phoneList.length,
-    withHistory: results.found,
-    openComplaints: results.open,
-    closedOrNone: results.closed,
-    noHistoryData: results.noData,
-    failedCount: results.failed,
-    detectedComplaints
-  };
+  return await complaintsManager.aiDeepScanMOHConversations(MOH_NUMBERS, getMOHNumbersFromLabels);
 }
 
 // ─── Graceful Shutdown ────────────────────────────────────────────────────────
