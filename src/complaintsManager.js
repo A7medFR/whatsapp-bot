@@ -344,17 +344,18 @@ async function processMOHMessagePipeline(msg, sock) {
     if (!active) return;
 
     if (hasAttachment) {
-      active.status = 'PENDING_REVIEW';
+      active.status = 'CLOSED';
+      active.closeDate = new Date().toISOString();
       active.messages.push({
         timestamp: new Date().toISOString(),
-        text: text || '[ملف مرفق مرسل من العيادة - بانتظار المراجعة]',
+        text: text || '[ملف مرفق مرسل من العيادة - تم إغلاق الشكوى]',
         fromMe: true,
         hasAttachment: true,
         isReminder: false,
         messageType: 'OUTBOUND_ATTACHMENT'
       });
       saveComplaintsCache(complaints);
-      logEvent(`⚠️ Outbound attachment sent. Mutated complaint ${active.ticketId} status to PENDING_REVIEW.`, 'info');
+      logEvent(`✅ Outbound attachment sent. Closed complaint ${active.ticketId}.`, 'info');
     } else {
       active.messages.push({
         timestamp: new Date().toISOString(),
