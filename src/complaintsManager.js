@@ -278,10 +278,16 @@ async function processMOHMessagePipeline(msg, sock) {
   const pushName = msg.pushName || '';
 
   // Safe multi-media text extractor
-  const text = msg.message.conversation ||
-               msg.message.extendedTextMessage?.text ||
-               msg.message.imageMessage?.caption ||
-               msg.message.documentMessage?.caption || '';
+  const unwrapped = msg.message?.ephemeralMessage?.message ||
+                    msg.message?.viewOnceMessage?.message ||
+                    msg.message?.viewOnceMessageV2?.message ||
+                    msg.message;
+
+  const text = unwrapped?.conversation ||
+               unwrapped?.extendedTextMessage?.text ||
+               unwrapped?.imageMessage?.caption ||
+               unwrapped?.documentMessage?.caption ||
+               unwrapped?.videoMessage?.caption || '';
 
   const hasAttachment = !!(msg.message.imageMessage ||
                            msg.message.documentMessage ||

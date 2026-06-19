@@ -80,7 +80,7 @@ ${JSON.stringify(activeTickets.map(t => ({ ticketId: t.ticketId || t.complaintId
    - "OTHER": The message is clearly not a regulatory complaint or reminder. Examples:
      * Pure greetings: "السلام عليكم", "مرحبا", "شكراً"
      * Administrative pleasantries unrelated to any complaint
-     * IMPORTANT: Even OTHER messages get logged — they are NEVER silently discarded
+     * IMPORTANT: If the message has an attachment (File/Image) and contains ANY text indicating follow-up (like "الرجاء الافادة", "للإفادة", "مرفق"), do NOT classify as OTHER. It must be REMINDER or NEW_COMPLAINT.
 
 2. **TICKET ID EXTRACTION**: If the message explicitly mentions a ticket ID (e.g. "بلاغ رقم 123456", "شكوى رقم 987654"), extract the numeric ID and prefix it as "MOH-XXXX". Otherwise, return null.
 
