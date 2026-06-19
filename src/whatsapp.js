@@ -600,7 +600,7 @@ async function connect() {
       const isMOHLabel    = mohLabelId && knownLabels.includes(String(mohLabelId));
       const isMOHNumber   = MOH_NUMBERS.some(num => phoneNumbersMatch(senderPhone, num));
       
-      const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || pushName.toLowerCase().includes('moh'));
+      const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || /\bmoh\b/i.test(pushName));
       
       const complaints = loadComplaintsCache();
       const hasActiveComplaint = complaints.some(c => phoneNumbersMatch(c.phone || c.senderPhone || '', senderPhone) && c.status === 'OPEN');
