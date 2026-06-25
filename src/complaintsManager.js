@@ -290,20 +290,12 @@ async function processMOHMessagePipeline(msg, sock) {
                unwrapped?.documentMessage?.caption ||
                unwrapped?.videoMessage?.caption || '';
 
-  const hasAttachment = !!(msg.message.imageMessage ||
-                           msg.message.documentMessage ||
-                           msg.message.documentWithCaptionMessage ||
-                           msg.message.videoMessage ||
-                           msg.message.audioMessage ||
-                           msg.message.ephemeralMessage?.message?.imageMessage ||
-                           msg.message.ephemeralMessage?.message?.documentMessage ||
-                           msg.message.ephemeralMessage?.message?.documentWithCaptionMessage ||
-                           msg.message.viewOnceMessage?.message?.imageMessage ||
-                           msg.message.viewOnceMessage?.message?.documentMessage ||
-                           msg.message.viewOnceMessage?.message?.documentWithCaptionMessage ||
-                           msg.message.viewOnceMessageV2?.message?.imageMessage ||
-                           msg.message.viewOnceMessageV2?.message?.documentMessage ||
-                           msg.message.viewOnceMessageV2?.message?.documentWithCaptionMessage);
+  const hasAttachment = !!(unwrapped?.imageMessage ||
+                           unwrapped?.documentMessage ||
+                           unwrapped?.videoMessage ||
+                           unwrapped?.audioMessage ||
+                           unwrapped?.documentWithCaptionMessage ||
+                           unwrapped?.stickerMessage);
 
   let mediaBuffer = null;
   let mediaMimeType = null;
@@ -417,6 +409,12 @@ async function processMOHMessagePipeline(msg, sock) {
     } else {
       messageType = 'OTHER';
     }
+  }
+
+  // Safety override: if message has attachment, it must NOT be classified as OTHER
+  if (hasAttachment && messageType === 'OTHER') {
+    logEvent(`⚠️ [Safety Override] Message has attachment but was classified as OTHER. Overriding to ${active ? 'REMINDER' : 'NEW_COMPLAINT'}`, 'info');
+    messageType = active ? 'REMINDER' : 'NEW_COMPLAINT';
   }
 
   // Step 3: Resolve target ticket ID from regex or Gemini extraction

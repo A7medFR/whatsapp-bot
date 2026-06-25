@@ -170,6 +170,7 @@ let qrString = null;
 const labelsStore = {};   // labelId → { id, name, color }
 const chatLabels  = {};   // jid     → Set<labelId>
 const systemLogs  = [];   // memory ring buffer of system logs
+const dynamicMOHNumbers = new Set();
 
 function logEvent(message, level = 'info') {
   const time = new Date().toLocaleTimeString('ar-SA');
@@ -440,6 +441,17 @@ async function connect() {
       sendReminderAdminAlert(sock, phone, name, reminderCount, text, originalMsg)
   });
 
+  // Pre-populate dynamic MOH numbers from cache
+  try {
+    const list = complaintsManager.loadComplaintsCache();
+    for (const c of list) {
+      const phone = c.phone || c.senderPhone;
+      if (phone) {
+        dynamicMOHNumbers.add(phone.replace(/\D/g, ''));
+      }
+    }
+  } catch (_) {}
+
   const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   
@@ -598,7 +610,7 @@ async function connect() {
       ].map(String);
 
       const isMOHLabel    = mohLabelId && knownLabels.includes(String(mohLabelId));
-      const isMOHNumber   = MOH_NUMBERS.some(num => phoneNumbersMatch(senderPhone, num));
+      const isMOHNumber   = MOH_NUMBERS.some(num => phoneNumbersMatch(senderPhone, num)) || dynamicMOHNumbers.has(senderPhone);
       
       const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || /\bmoh\b/i.test(pushName));
       
@@ -610,6 +622,16 @@ async function connect() {
       if (!isMOH) {
         // Silently skip — do not log, do not mark as read, do not process
         continue;
+      }
+
+      // Add to dynamic MOH numbers for session continuity
+      dynamicMOHNumbers.add(senderPhone);
+
+      // Attempt to auto-label the chat in WhatsApp Business if not already labeled
+      if (mohLabelId && !knownLabels.includes(String(mohLabelId))) {
+        addLabelToChat(senderPhone, MOH_LABEL).catch(err => {
+          logEvent(`⚠️ Failed to auto-label +${senderPhone} as MOH: ${err.message}`, 'warn');
+        });
       }
 
       logEvent(`📨 [MOH Message] from: +${senderPhone} (Name: "${pushName}") | isMOHNumber: ${isMOHNumber}, isMOHLabel: ${isMOHLabel}, isMOHPushName: ${isMOHPushName}, hasActiveComplaint: ${hasActiveComplaint} | MOH_NUMBERS: [${MOH_NUMBERS.join(', ')}]`, 'info');
