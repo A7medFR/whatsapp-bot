@@ -606,18 +606,22 @@ async function connect() {
       const hasActiveComplaint = complaints.some(c => phoneNumbersMatch(c.phone || c.senderPhone || '', senderPhone) && c.status === 'OPEN');
       const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName || hasActiveComplaint;
 
-      logEvent(`📨 [Received message] from: +${senderPhone} (Name: "${pushName}") | isMOHNumber: ${isMOHNumber}, isMOHLabel: ${isMOHLabel}, isMOHPushName: ${isMOHPushName}, hasActiveComplaint: ${hasActiveComplaint}, isMOH: ${isMOH} | MOH_NUMBERS loaded: [${MOH_NUMBERS.join(', ')}]`, 'info');
-
-      if (isMOH) {
-        // Run state machine complaints tracker pipeline
-        await processMOHMessagePipeline(msg, sock);
+      // ── Strict MOH-only gate: completely ignore messages from non-MOH contacts ──
+      if (!isMOH) {
+        // Silently skip — do not log, do not mark as read, do not process
+        continue;
       }
 
-      // Simulate reading the message (anti-ban read receipt simulation)
+      logEvent(`📨 [MOH Message] from: +${senderPhone} (Name: "${pushName}") | isMOHNumber: ${isMOHNumber}, isMOHLabel: ${isMOHLabel}, isMOHPushName: ${isMOHPushName}, hasActiveComplaint: ${hasActiveComplaint} | MOH_NUMBERS: [${MOH_NUMBERS.join(', ')}]`, 'info');
+
+      // Run state machine complaints tracker pipeline
+      await processMOHMessagePipeline(msg, sock);
+
+      // Simulate reading the message (anti-ban read receipt simulation — MOH only)
       if (SIMULATE_READ_RECEIPTS && sock && !msg.key.fromMe) {
         try {
           await sock.readMessages([msg.key]);
-          logEvent(`🔵 Marked message read from +${senderPhone}`, 'info');
+          logEvent(`🔵 Marked MOH message read from +${senderPhone}`, 'info');
         } catch (readErr) {
           // Ignore read errors
         }
