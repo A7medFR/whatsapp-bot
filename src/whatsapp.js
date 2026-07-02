@@ -147,7 +147,7 @@ const MOH_LABEL_ID   = (process.env.MOH_LABEL_ID    || '').trim();
 
 // Phone numbers of وزارة الصحة contacts (digits only, with country code)
 // The bot will notify admins whenever a message arrives from any of these numbers
-const MOH_NUMBERS = (process.env.MOH_NUMBERS || '')
+let MOH_NUMBERS = (process.env.MOH_NUMBERS || '')
   .split(',').map(n => formatJidNumber(n)).filter(Boolean);
 
 const LABELS_FILE    = path.resolve('./labels_cache.json');
@@ -184,6 +184,23 @@ function logEvent(message, level = 'info') {
   }
 }
 global.logEvent = logEvent;
+
+// Dynamically load MOH numbers from extracted_moh_numbers.txt if it exists
+try {
+  const EXTRACTED_MOH_FILE = path.resolve('./extracted_moh_numbers.txt');
+  if (fs.existsSync(EXTRACTED_MOH_FILE)) {
+    const fileContent = fs.readFileSync(EXTRACTED_MOH_FILE, 'utf8');
+    const fileNumbers = fileContent.split(',')
+      .map(n => formatJidNumber(n.trim()))
+      .filter(Boolean);
+    if (fileNumbers.length > 0) {
+      MOH_NUMBERS = Array.from(new Set([...MOH_NUMBERS, ...fileNumbers]));
+      logEvent(`📋 Loaded ${fileNumbers.length} MOH numbers from extracted_moh_numbers.txt`, 'info');
+    }
+  }
+} catch (err) {
+  console.error(`⚠️ Failed to load extracted MOH numbers: ${err.message}`);
+}
 
 const getStatus = () => ({ connected: isReady, hasQR: !!qrString, qr: qrString });
 const getLabels = () => labelsStore;
