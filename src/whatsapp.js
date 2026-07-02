@@ -634,8 +634,7 @@ async function connect() {
         });
       }
 
-      const direction = msg.key.fromMe ? '⬆️ OUTBOUND (clinic → MOH)' : '⬇️ INBOUND (MOH → clinic)';
-      logEvent(`📨 [MOH Message] ${direction} | contact: +${senderPhone} (Name: "${pushName}") | isMOHNumber: ${isMOHNumber}, isMOHLabel: ${isMOHLabel}, isMOHPushName: ${isMOHPushName}, hasActiveComplaint: ${hasActiveComplaint} | MOH_NUMBERS: [${MOH_NUMBERS.join(', ')}]`, 'info');
+      logEvent(`📨 [MOH Message] from: +${senderPhone} (Name: "${pushName}") | isMOHNumber: ${isMOHNumber}, isMOHLabel: ${isMOHLabel}, isMOHPushName: ${isMOHPushName}, hasActiveComplaint: ${hasActiveComplaint} | MOH_NUMBERS: [${MOH_NUMBERS.join(', ')}]`, 'info');
 
       // Run state machine complaints tracker pipeline
       await processMOHMessagePipeline(msg, sock);
