@@ -541,6 +541,99 @@ app.get('/', async (_req, res) => {
         padding: 20px;
       }
     }
+  /* Session Export Modal */
+  #session-export-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .session-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(6px);
+  }
+  .session-modal-box {
+    position: relative;
+    background: #12192b;
+    border: 1px solid rgba(100, 180, 255, 0.2);
+    border-radius: 14px;
+    padding: 28px;
+    width: min(560px, 92vw);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    animation: fadeInModal 0.25s ease;
+  }
+  @keyframes fadeInModal {
+    from { opacity: 0; transform: scale(0.95) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .session-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--accent-cyan);
+    font-weight: 700;
+    font-size: 1rem;
+  }
+  .session-modal-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: color 0.2s;
+  }
+  .session-modal-close:hover { color: #fff; }
+  .session-modal-hint {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .session-modal-hint code {
+    background: rgba(100, 180, 255, 0.12);
+    color: var(--accent-cyan);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.8rem;
+  }
+  .session-modal-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--accent-cyan);
+    opacity: 0.7;
+  }
+  .session-modal-value {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(100, 180, 255, 0.15);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: monospace;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    word-break: break-all;
+    max-height: 120px;
+    overflow-y: auto;
+    line-height: 1.5;
+    user-select: all;
+  }
+  .session-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   </style>
 </head>
 <body>
@@ -574,6 +667,10 @@ app.get('/', async (_req, res) => {
       </nav>
 
       <div class="sidebar-footer">
+        <button class="btn btn-export" onclick="exportSession()" id="sidebar-export-btn" style="width:100%; justify-content:center; padding:10px; margin-bottom:12px; font-size:0.8rem;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export Session
+        </button>
         <div id="connection-status" class="badge">
           <div class="dot"></div>
           <span id="status-text">Checking Status...</span>
@@ -743,21 +840,71 @@ app.get('/', async (_req, res) => {
       try {
         const res = await fetch('/session/export');
         if (!res.ok) {
-          showToast('❌ Export failed or session not loaded.');
+          showToast('❌ Export failed. Make sure WhatsApp is connected first.');
           return;
         }
         const data = await res.json();
         const b64 = data.WA_SESSION_B64 || data.base64;
-        if (b64) {
-          await navigator.clipboard.writeText(b64);
-          showToast('✅ Base64 Session token copied to clipboard!');
-        } else {
-          showToast('❌ Export failed - no token returned.');
+        if (!b64) {
+          showToast('❌ No session found. Scan the QR first, then export.');
+          return;
         }
+        // Show modal overlay with the session key
+        const existing = document.getElementById('session-export-modal');
+        if (existing) existing.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'session-export-modal';
+        modal.dataset.b64 = b64;
+        modal.innerHTML =
+          '<div class="session-modal-backdrop" onclick="closeSessionModal()"></div>' +
+          '<div class="session-modal-box">' +
+            '<div class="session-modal-header">' +
+              '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
+              '<span>Export WhatsApp Session</span>' +
+              '<button onclick="closeSessionModal()" class="session-modal-close">&#10005;</button>' +
+            '</div>' +
+            '<p class="session-modal-hint">Copy this value and set it as <code>WA_SESSION_B64</code> in your Railway / cloud environment variables to persist your session across restarts.</p>' +
+            '<div class="session-modal-label">WA_SESSION_B64</div>' +
+            '<div class="session-modal-value" id="session-b64-value">' + b64 + '</div>' +
+            '<div class="session-modal-actions">' +
+              '<button class="btn btn-export" id="session-copy-btn" onclick="copySessionToClipboard()">' +
+                '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+                ' Copy to Clipboard' +
+              '</button>' +
+              '<button class="btn" onclick="closeSessionModal()" style="margin-left:8px;">Dismiss</button>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(modal);
       } catch (err) {
         showToast('❌ Connection error during export.');
       }
     }
+
+    async function copySessionToClipboard() {
+      try {
+        const modal = document.getElementById('session-export-modal');
+        const b64 = modal ? modal.dataset.b64 : '';
+        if (!b64) { showToast('❌ No session data found.'); return; }
+        await navigator.clipboard.writeText(b64);
+        const btn = document.getElementById('session-copy-btn');
+        if (btn) {
+          btn.textContent = '✅ Copied!';
+          btn.style.background = 'rgba(52, 211, 153, 0.2)';
+          btn.style.borderColor = 'rgba(52, 211, 153, 0.4)';
+          btn.style.color = '#a7f3d0';
+          setTimeout(() => { document.getElementById('session-export-modal')?.remove(); }, 1500);
+        }
+      } catch (err) {
+        showToast('❌ Could not copy. Please select the text manually.');
+      }
+    }
+
+    function closeSessionModal() {
+      var m = document.getElementById('session-export-modal');
+      if (m) m.remove();
+    }
+
 
     async function exportMOHNumbers() {
       try {
