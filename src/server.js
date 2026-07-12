@@ -70,14 +70,6 @@ global.broadcastLog = (log) => {
   });
 };
 
-// Chat UI SSE listeners
-if (!global.chatListeners) global.chatListeners = [];
-global.broadcastChatMessage = (msg) => {
-  global.chatListeners.forEach(listener => {
-    try { listener(msg); } catch (_) { }
-  });
-};
-
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 /** Premium Diagnostics Dashboard & Live Console UI */
@@ -671,10 +663,6 @@ app.get('/', async (_req, res) => {
         <a href="/kpi" class="nav-item">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           KPI Dashboard
-        </a>
-        <a href="/chat" class="nav-item">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          WhatsApp Chat
         </a>
       </nav>
 
@@ -1608,98 +1596,7 @@ app.get('/session/export', requireApiKey, (_req, res) => {
   });
 });
 
-/** ─── WhatsApp Chat UI ──────────────────────────────────────────────────────── */
-
-/**
- * GET /chat
- * Serves the WhatsApp Web replica interface.
- */
-app.get('/chat', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'whatsapp-chat.html'));
-});
-
-/**
- * GET /api/chats
- * Returns all chats sorted by most recent message.
- */
-app.get('/api/chats', (_req, res) => {
-  try {
-    const chats = wa.getAllChats();
-    res.json({ success: true, chats });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * GET /api/chats/events
- * SSE stream for real-time incoming/outgoing messages pushed to the Chat UI.
- */
-app.get('/api/chats/events', (req, res) => {
-  res.writeHead(200, {
-    'Content-Type':  'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection':    'keep-alive',
-  });
-  res.write('retry: 3000\n\n');
-
-  const onMsg = (msg) => {
-    res.write(`data: ${JSON.stringify(msg)}\n\n`);
-  };
-
-  global.chatListeners.push(onMsg);
-
-  req.on('close', () => {
-    global.chatListeners = global.chatListeners.filter(l => l !== onMsg);
-  });
-});
-
-/**
- * GET /api/chats/:phone/messages
- * Returns the full conversation history for a given phone number.
- */
-app.get('/api/chats/:phone/messages', (req, res) => {
-  try {
-    const { phone } = req.params;
-    const messages = wa.getChatHistory(phone);
-    res.json({ success: true, phone, messages });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * POST /api/chats/:phone/messages
- * Sends a text message to the given phone number.
- */
-app.post('/api/chats/:phone/messages', async (req, res) => {
-  try {
-    const { phone } = req.params;
-    const { text }  = req.body;
-    if (!text || !text.trim()) {
-      return res.status(400).json({ error: 'text field is required.' });
-    }
-    await wa.sendMessage(phone, { text: text.trim() });
-    // Echo the sent message to SSE listeners so the UI updates immediately
-    if (global.broadcastChatMessage) {
-      global.broadcastChatMessage({
-        phone,
-        jid:   `${phone}@s.whatsapp.net`,
-        fromMe: true,
-        text:   text.trim(),
-        hasAttachment: false,
-        pushName: '',
-        timestamp: new Date().toISOString(),
-      });
-    }
-    res.json({ success: true, message: 'Message sent.' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.use((_req, res) => res.status(404).json({ error: 'Route not found.' }));
-
 
 
 // ─── Start ────────────────────────────────────────────────────────────────────

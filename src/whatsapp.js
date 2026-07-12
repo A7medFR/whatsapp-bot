@@ -601,26 +601,6 @@ async function connect() {
     for (const msg of messages) {
       if (!msg.message) continue;
 
-      // ── Broadcast to chat UI SSE listeners (all messages, before MOH gate) ──
-      try {
-        const broadcastJid = msg.key.remoteJid || '';
-        if (broadcastJid && !broadcastJid.endsWith('@g.us') && global.broadcastChatMessage) {
-          const broadcastPhone = broadcastJid.split('@')[0].replace(/\D/g, '');
-          global.broadcastChatMessage({
-            phone: broadcastPhone,
-            jid:   broadcastJid,
-            fromMe: !!msg.key?.fromMe,
-            text:  getMessageText(msg),
-            hasAttachment: hasAttachment(msg),
-            pushName: msg.pushName || '',
-            timestamp: msg.messageTimestamp
-              ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
-              : new Date().toISOString(),
-          });
-        }
-      } catch (_) { /* never break core logic */ }
-
-
       // Deduplicate by message ID
       if (msg.key.id) {
         if (processedMessageIds.has(msg.key.id)) {
@@ -974,75 +954,6 @@ function getChatHistory(phone) {
   return storeHistory.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 }
 
-// ─── Get All Chats Summary for UI ─────────────────────────────────────────────
-function getAllChats() {
-  const chatMap = {};
-
-  // 1. Pull from Baileys in-memory store
-  if (store && store.messages) {
-    for (const [jid, msgs] of Object.entries(store.messages)) {
-      if (!jid || jid.endsWith('@g.us') || jid.endsWith('@broadcast')) continue;
-      const phone = jid.split('@')[0].replace(/\D/g, '');
-      if (!phone) continue;
-
-      const msgArray = Array.from(msgs || []);
-      if (msgArray.length === 0) continue;
-
-      // Sort by timestamp descending to get last message
-      const sorted = msgArray
-        .filter(m => m && m.message)
-        .sort((a, b) => Number(b.messageTimestamp || 0) - Number(a.messageTimestamp || 0));
-
-      if (sorted.length === 0) continue;
-
-      const lastMsg = sorted[0];
-      const lastText = getMessageText(lastMsg) || (hasAttachment(lastMsg) ? '📎 Attachment' : '');
-      const lastTime = lastMsg.messageTimestamp
-        ? new Date(Number(lastMsg.messageTimestamp) * 1000).toISOString()
-        : null;
-      const pushName = lastMsg.pushName || '';
-
-      chatMap[phone] = {
-        phone,
-        jid,
-        name: pushName || `+${phone}`,
-        lastMessage: lastText,
-        lastTime,
-        fromMe: !!lastMsg.key?.fromMe,
-        messageCount: msgArray.length,
-      };
-    }
-  }
-
-  // 2. Merge in complaints cache (ensures MOH contacts always appear)
-  const cached = loadComplaintsCache();
-  for (const c of cached) {
-    const phone = (c.phone || c.senderPhone || '').replace(/\D/g, '');
-    if (!phone) continue;
-    if (!chatMap[phone]) {
-      chatMap[phone] = {
-        phone,
-        jid: `${phone}@s.whatsapp.net`,
-        name: c.contactName || c.pushName || `+${phone}`,
-        lastMessage: c.messages && c.messages.length > 0
-          ? (c.messages[c.messages.length - 1].text || '📎 Attachment')
-          : '',
-        lastTime: c.updatedAt || c.createdAt || null,
-        fromMe: false,
-        messageCount: (c.messages || []).length,
-      };
-    } else {
-      // Enrich existing entry with name from complaint if missing
-      if (!chatMap[phone].name || chatMap[phone].name === `+${phone}`) {
-        chatMap[phone].name = c.contactName || c.pushName || chatMap[phone].name;
-      }
-    }
-  }
-
-  return Object.values(chatMap)
-    .sort((a, b) => new Date(b.lastTime || 0) - new Date(a.lastTime || 0));
-}
-
 // ─── Reconstruct Complaint from History ───────────────────────────────────────
 async function reconstructComplaintFromHistory(phone) {
   return await complaintsManager.reconstructComplaintFromHistory(phone);
@@ -1072,5 +983,5 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, getAllChats, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels, addManualComplaint, updateManualComplaint, deleteComplaint, getMessageText, hasAttachment };
+module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels, addManualComplaint, updateManualComplaint, deleteComplaint };
 
