@@ -376,4 +376,99 @@ function getFallbackHistoryDecision({ phone, history, activeTicketId }) {
   };
 }
 
-module.exports = { processMessageEvent, analyzeChatHistory };
+/**
+ * AI Discovery Classifier: Analyzes an incoming message from an unknown contact
+ * to determine with high confidence if it is from the Ministry of Health (MOH) or a regulatory body.
+ *
+ * @param {object} params
+ * @param {string} params.phone - Sender phone number.
+ * @param {string} params.pushName - Sender WhatsApp push name.
+ * @param {string} params.messageText - Incoming message text.
+ * @param {boolean} params.hasAttachment - Media attachment status.
+ * @returns {Promise<object>} Structured AI discovery classification.
+ */
+async function classifyIncomingMOHMessage({ phone, pushName, messageText, hasAttachment }) {
+  if (!ai) {
+    return getFallbackDiscoveryDecision({ phone, pushName, messageText, hasAttachment });
+  }
+
+  try {
+    const prompt = `
+You are the AI Regulatory Officer for a Saudi medical clinic.
+Your job is to analyze an incoming WhatsApp message from an unlisted contact (+${phone}, Name: "${pushName || 'Unknown'}") and determine whether this message is an official communication, complaint, audit, inspection, or referral from the Ministry of Health (MOH - وزارة الصحة), Health Affairs (الشؤون الصحية), Private Sector Compliance (القطاع الخاص), or 937 call center.
+
+Message Telemetry:
+- Phone: +${phone}
+- Push Name: "${pushName || ''}"
+- Message Text: "${messageText || '[No text — media/attachment only]'}"
+- Has Attachment (File/Image): ${hasAttachment}
+
+Classification Criteria for isMOH = true:
+1. Mentions ticket/complaint keywords (e.g., "بلاغ رقم", "شكوى رقم", "إفادة", "تذكير", "وزارة الصحة", "الشؤون الصحية", "937", "القطاع الخاص", "المخالفات").
+2. Contains official regulatory tone, inspection notices, or requests official clinic responses within 24-48 hours.
+3. Contains attachments sent alongside regulatory inquiry terms.
+
+Return ONLY a JSON object with:
+{
+  "isMOH": boolean,
+  "confidence": number (0.0 to 1.0),
+  "messageCategory": "NEW_COMPLAINT" | "REMINDER" | "INSPECTION_NOTICE" | "GENERAL_INQUIRY" | "OTHER",
+  "extractedTicketId": string or null (e.g. "MOH-874921"),
+  "urgency": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+  "summary": string (Concise Arabic summary),
+  "suggestedAction": string (Action for clinic staff),
+  "reasoning": string (Short explanation)
+}
+`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json'
+      }
+    });
+
+    const result = JSON.parse(response.text);
+    if (global.logEvent) {
+      global.logEvent(`🤖 [AI Discovery Classifier]: isMOH=${result.isMOH}, Confidence=${result.confidence}, Urgency=${result.urgency}, Category=${result.messageCategory}`, 'info');
+    }
+    return result;
+  } catch (err) {
+    if (global.logEvent) {
+      global.logEvent(`⚠️ [AI Discovery Error]: ${err.message}. Using heuristic fallback.`, 'warn');
+    }
+    return getFallbackDiscoveryDecision({ phone, pushName, messageText, hasAttachment });
+  }
+}
+
+function getFallbackDiscoveryDecision({ phone, pushName, messageText, hasAttachment }) {
+  const text = (messageText || '').toLowerCase();
+  const name = (pushName || '').toLowerCase();
+
+  const mohKeywords = [
+    'وزارة الصحة', 'الشؤون الصحية', 'القطاع الخاص', 'بلاغ', 'شكوى', 'تذكير',
+    '937', 'إفادة', 'موافاتنا', 'ministry of health', 'moh'
+  ];
+
+  const hasNameKeyword = mohKeywords.some(k => name.includes(k));
+  const hasTextKeyword = mohKeywords.some(k => text.includes(k));
+
+  const ticketMatch = (messageText || '').match(/(?:بلاغ\s*رقم\s*|شكوى\s*رقم\s*|رقم\s*البلاغ\s*)(\d+)/i);
+  const ticketId = ticketMatch ? `MOH-${ticketMatch[1]}` : null;
+
+  const isMOH = hasNameKeyword || hasTextKeyword || !!ticketId;
+
+  return {
+    isMOH,
+    confidence: isMOH ? 0.85 : 0.10,
+    messageCategory: ticketId ? 'NEW_COMPLAINT' : (isMOH ? 'GENERAL_INQUIRY' : 'OTHER'),
+    extractedTicketId: ticketId,
+    urgency: isMOH ? 'MEDIUM' : 'LOW',
+    summary: text.substring(0, 60) || 'رسالة واردة',
+    suggestedAction: isMOH ? 'مراجعة الرسالة والرد على وزارة الصحة' : 'لا يلزم إجابة',
+    reasoning: 'Fallback heuristic classification'
+  };
+}
+
+module.exports = { processMessageEvent, analyzeChatHistory, classifyIncomingMOHMessage };

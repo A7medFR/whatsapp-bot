@@ -467,12 +467,27 @@ async function processMOHMessagePipeline(msg, sock) {
     saveComplaintsCache(complaints);
     logEvent(`🚨 [AI: NEW_COMPLAINT] Opened ticket ${targetTicketId} for +${phone} (Attachment: ${hasAttachment}, Temp: ${isTemp})`, 'info');
 
-    if (triggerAdminAlertHelper) {
+    if (sendAdminAlertWithCounterHelper) {
+      await sendAdminAlertWithCounterHelper(
+        phone,
+        pushName || 'وزارة الصحة',
+        1,
+        text,
+        true,
+        msg,
+        {
+          ticketId: newComplaint.ticketId,
+          category: newComplaint.category,
+          urgency: geminiResult.urgency || 'HIGH',
+          draftReply: newComplaint.draftReply
+        }
+      );
+    } else if (triggerAdminAlertHelper) {
       const attachmentNote = hasAttachment ? '📎 [مع ملف/صورة] ' : '';
       const alertText = `🚨 ${attachmentNote}شكوى جديدة من وزارة الصحة\n` +
                         `📱 الرقم: +${phone}\n` +
                         `👤 الاسم: ${pushName || 'وزارة الصحة'}\n` +
-                        `📊 عدد الرسائل: 1\n` +
+                        `🎫 رقم البلاغ: ${targetTicketId}\n` +
                         `💬 الرسالة: ${text || '[ملف مرفق]'}`;
       await triggerAdminAlertHelper(alertText, msg);
     }
@@ -519,7 +534,17 @@ async function processMOHMessagePipeline(msg, sock) {
       saveComplaintsCache(complaints);
       logEvent(`🔔 [AI: REMINDER] No active ticket found — auto-created ${targetTicketId} for +${phone}`, 'info');
       if (sendReminderAdminAlertHelper) {
-        await sendReminderAdminAlertHelper(phone, pushName || 'وزارة الصحة', autoTicket.reminderCount, text, msg);
+        await sendReminderAdminAlertHelper(
+          phone,
+          pushName || 'وزارة الصحة',
+          autoTicket.reminderCount,
+          text,
+          msg,
+          {
+            ticketId: autoTicket.ticketId,
+            draftReply: autoTicket.draftReply
+          }
+        );
       }
       return;
     }
@@ -561,7 +586,17 @@ async function processMOHMessagePipeline(msg, sock) {
     logEvent(`🔔 [AI: REMINDER] Ticket ${matchedComplaint.ticketId} | Msgs: ${matchedComplaint.messageCount} | Reminders: ${matchedComplaint.reminderCount}`, 'info');
 
     if (sendReminderAdminAlertHelper) {
-      await sendReminderAdminAlertHelper(phone, matchedComplaint.name, matchedComplaint.reminderCount || 1, text, msg);
+      await sendReminderAdminAlertHelper(
+        phone,
+        matchedComplaint.name,
+        matchedComplaint.reminderCount || 1,
+        text,
+        msg,
+        {
+          ticketId: matchedComplaint.ticketId,
+          draftReply: matchedComplaint.draftReply
+        }
+      );
     }
   }
   // ── Branch: OTHER ─────────────────────────────────────────────────────────────
@@ -569,10 +604,10 @@ async function processMOHMessagePipeline(msg, sock) {
     logEvent(`ℹ️ [AI: OTHER] Message from +${phone} classified as OTHER — forwarding directly without registering as complaint.`, 'info');
 
     if (triggerAdminAlertHelper) {
-      const alertText = `ℹ️ ممثل الوزارة ارسل رسالة مفادها:\n` +
-                        `💬 ${text || '[ملف مرفق]'}\n\n` +
-                        `📱 الرقم: +${phone}\n` +
-                        `👤 الاسم: ${pushName || 'وزارة الصحة'}`;
+      const alertText = `ℹ️ *إشعار وارد من ممثل وزارة الصحة* ℹ️\n\n` +
+                        `👤 *الاسم:* ${pushName || 'وزارة الصحة'}\n` +
+                        `📱 *الرقم:* +${phone}\n\n` +
+                        `💬 *محتوى الرسالة:*\n"${text || '[ملف/مستند مرفق]'}"`;
       await triggerAdminAlertHelper(alertText, msg);
     }
   }

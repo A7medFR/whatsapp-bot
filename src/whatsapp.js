@@ -100,7 +100,7 @@ async function getCleanPhoneAndJid(jid, msg = null, socket = null) {
   let rawPhone = jid.split('@')[0].replace(/\D/g, '');
   let resolvedJid = jid;
   
-  // Try to resolve LID JIDs
+  // Try to resolve LID JIDs (WhatsApp Multi-Device / LID Accounts)
   if (jid.endsWith('@lid')) {
     let resolved = null;
     
@@ -115,23 +115,23 @@ async function getCleanPhoneAndJid(jid, msg = null, socket = null) {
       }
     }
     
-    // 2. If prefix itself looks like a phone number (at least 9 digits)
-    if (!resolved && rawPhone.length >= 9) {
-      resolved = `${rawPhone}@s.whatsapp.net`;
-    }
-    
-    // 3. Fallback to Baileys LID mapping repository
+    // 2. Query Baileys LID mapping repository (socket) FIRST
     if (!resolved && socket) {
       try {
         const pn = await socket.signalRepository?.lidMapping?.getPNForLID?.(jid);
-        if (pn) resolved = pn;
+        if (pn) resolved = pn.includes('@') ? pn : `${pn}@s.whatsapp.net`;
       } catch (_) {}
     }
     
-    if (resolved) {
+    if (resolved && resolved.endsWith('@s.whatsapp.net')) {
       resolvedJid = resolved;
-      rawPhone = resolved.split('@')[0].replace(/\D/g, '');
+      rawPhone = formatJidNumber(resolved.split('@')[0]);
+    } else {
+      // Keep original LID for JID but normalize rawPhone safely
+      rawPhone = formatJidNumber(rawPhone);
     }
+  } else {
+    rawPhone = formatJidNumber(rawPhone);
   }
   
   return { phone: rawPhone, jid: resolvedJid };
@@ -356,25 +356,48 @@ async function triggerAdminAlert(sock, text, originalMsg = null) {
   }
 }
 
-async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shouldIncludeCounter = true, originalMsg = null) {
-  let alertText = `🚨 رسالة جديدة واردة من وزارة الصحة\n` +
-                  `📱 الرقم: +${phone}\n` +
-                  `👤 الاسم: ${name}\n`;
+async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shouldIncludeCounter = true, originalMsg = null, extraMeta = {}) {
+  const urgency = extraMeta?.urgency || 'HIGH';
+  const urgencyIcon = urgency === 'CRITICAL' ? '🔥' : urgency === 'HIGH' ? '🚨' : '⚠️';
+  const category = extraMeta?.category || 'بلاغ جديد';
+  const ticketId = extraMeta?.ticketId || 'MOH-قيد_المعالجة';
+  const draftReply = extraMeta?.draftReply || '';
+
+  let alertText = `${urgencyIcon} *تنبيه نظام متابعة الشكاوى — وزارة الصحة* ${urgencyIcon}\n\n` +
+                  `📱 *المرسل:* +${phone}\n` +
+                  `👤 *الاسم:* ${name || 'وزارة الصحة'}\n` +
+                  `🎫 *رقم البلاغ:* \`${ticketId}\`\n` +
+                  `📌 *التصنيف:* ${category}\n`;
   if (shouldIncludeCounter && counter !== null) {
-    alertText += `📊 عدد الرسائل: ${counter}\n`;
+    alertText += `📊 *إجمالي الرسائل:* ${counter}\n`;
   }
-  alertText += `💬 الرسالة: ${text || '[ملف مرفق]'}`;
+  alertText += `\n💬 *محتوى الرسالة:*\n"${text || '[ملف/مستند مرفق]'}"\n`;
+
+  if (draftReply) {
+    alertText += `\n💡 *مقترح الرد من الذكاء الاصطناعي:*\n_${draftReply}_\n`;
+  }
+
+  alertText += `\n⚙️ _تم توثيق وتوجيه الرسالة تلقائياً بواسطة محرك الذكاء الاصطناعي_`;
   
   await triggerAdminAlert(sock, alertText, originalMsg);
 }
 
-async function sendReminderAdminAlert(sock, phone, name, reminderCount, text, originalMsg = null) {
-  let alertText = `🚨 *تنبيه: تذكير شكوى من وزارة الصحة* 🚨\n\n` +
-                  `👤 *الاسم:* ${name}\n` +
+async function sendReminderAdminAlert(sock, phone, name, reminderCount, text, originalMsg = null, extraMeta = {}) {
+  const ticketId = extraMeta?.ticketId || 'MOH-قيد_المعالجة';
+  const draftReply = extraMeta?.draftReply || '';
+
+  let alertText = `🚨 *تنبيه عاجل: تذكير شكوى متكرر من وزارة الصحة* 🚨\n\n` +
+                  `👤 *الاسم:* ${name || 'وزارة الصحة'}\n` +
                   `📱 *الرقم:* +${phone}\n` +
-                  `💬 *رسالة التذكير:* "${text || '[ملف مرفق]'}"\n\n` +
-                  `⚠️ *عدد مرات الارسال:* ${reminderCount} ⚠️\n` +
-                  `💡 يرجى الرد على الشكوى وإغلاقها في أقرب وقت لتفادي المخالفات.`;
+                  `🎫 *رقم البلاغ:* \`${ticketId}\`\n` +
+                  `⚠️ *عدد مرات التذكير الواردة:* ${reminderCount}\n\n` +
+                  `💬 *رسالة التذكير:*\n"${text || '[ملف/مستند مرفق]'}"\n\n`;
+
+  if (draftReply) {
+    alertText += `💡 *الرد الموصى به لإفادة الشكوى:*\n_${draftReply}_\n\n`;
+  }
+
+  alertText += `‼️ *ملاحظة هامة:* يرجى الرد على الشكوى وإرفاق الإفادة رسمياً لتجنب تسجيل مخالفات تنظيمية.`;
   
   await triggerAdminAlert(sock, alertText, originalMsg);
 }
@@ -596,7 +619,7 @@ async function connect() {
 
   // ── Notify admin when a وزارة الصحة labeled chat sends a message ──────────
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
+    if (type !== 'notify' && type !== 'append') return;
 
     for (const msg of messages) {
       if (!msg.message) continue;
@@ -619,7 +642,8 @@ async function connect() {
       const { phone: senderPhone, jid: resolvedJid } = await getCleanPhoneAndJid(sender, msg, sock);
       const pushName    = msg.pushName || '';
 
-      const mohLabelId = findLabelId(MOH_LABEL);
+      const msgText     = getMessageText(msg) || '';
+      const mohLabelId  = findLabelId(MOH_LABEL);
       const knownLabels = [
         ...(chatLabels[sender] || new Set()),
         ...(chatLabels[senderPhone] || new Set()),
@@ -628,16 +652,40 @@ async function connect() {
 
       const isMOHLabel    = mohLabelId && knownLabels.includes(String(mohLabelId));
       const isMOHNumber   = MOH_NUMBERS.some(num => phoneNumbersMatch(senderPhone, num)) || dynamicMOHNumbers.has(senderPhone);
-      
       const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || /\bmoh\b/i.test(pushName));
+      const isMOHText     = !msg.key.fromMe && /بلاغ|شكوى|تذكير|وزارة\s*الصحة|الشؤون\s*الصحية|القطاع\s*الخاص|937|إفادة|موافاتنا|ministry of health|\bmoh\b/i.test(msgText);
       
-      const complaints = loadComplaintsCache();
-      const hasActiveComplaint = complaints.some(c => phoneNumbersMatch(c.phone || c.senderPhone || '', senderPhone) && c.status === 'OPEN');
-      const isMOH         = isMOHLabel || isMOHNumber || isMOHPushName || hasActiveComplaint;
+      // ── Tier 1: Fast-Path (Deterministic) ──────────────────────────────────
+      const fastPathMatched = isMOHLabel || isMOHNumber || isMOHPushName || isMOHText || hasActiveComplaint;
+      let isMOH = fastPathMatched;
+      let detectionMethod = fastPathMatched ? 'FAST_PATH' : null;
+      let aiDiscoveryResult = null;
 
-      // ── Strict MOH-only gate: completely ignore messages from non-MOH contacts ──
+      // ── Tier 2: AI Discovery Path (Smart Classifier for Unknown Senders) ────
+      if (!isMOH && !msg.key.fromMe) {
+        try {
+          aiDiscoveryResult = await geminiService.classifyIncomingMOHMessage({
+            phone: senderPhone,
+            pushName,
+            messageText: msgText,
+            hasAttachment: hasAttachment(msg)
+          });
+
+          if (aiDiscoveryResult && aiDiscoveryResult.isMOH && (aiDiscoveryResult.confidence || 0) >= 0.70) {
+            isMOH = true;
+            detectionMethod = 'AI_DISCOVERY';
+            logEvent(`⚡ [AI Discovery Promotion] Sender +${senderPhone} promoted to MOH (Confidence: ${aiDiscoveryResult.confidence}, Reason: ${aiDiscoveryResult.reasoning})`, 'info');
+          }
+        } catch (aiErr) {
+          logEvent(`⚠️ AI Discovery check error for +${senderPhone}: ${aiErr.message}`, 'warn');
+        }
+      }
+
+      // ── Gate check ────────────────────────────────────────────────────────────
       if (!isMOH) {
-        // Silently skip — do not log, do not mark as read, do not process
+        if (!msg.key.fromMe && (msgText || pushName)) {
+          logEvent(`ℹ️ [Skipped Non-MOH Message] from: +${senderPhone} (Name: "${pushName}") | Text: "${msgText.slice(0, 40)}" | Skipped by Fast-Path & AI Discovery.`, 'info');
+        }
         continue;
       }
 
@@ -651,7 +699,11 @@ async function connect() {
         });
       }
 
-      logEvent(`📨 [MOH Message] from: +${senderPhone} (Name: "${pushName}") | isMOHNumber: ${isMOHNumber}, isMOHLabel: ${isMOHLabel}, isMOHPushName: ${isMOHPushName}, hasActiveComplaint: ${hasActiveComplaint} | MOH_NUMBERS: [${MOH_NUMBERS.join(', ')}]`, 'info');
+      logEvent(`📨 [MOH Message Confirmed] from: +${senderPhone} (Name: "${pushName}") | Method: ${detectionMethod} | matched: [Number:${isMOHNumber}, Label:${isMOHLabel}, PushName:${isMOHPushName}, Keywords:${isMOHText}, ActiveComplaint:${hasActiveComplaint}]`, 'info');
+
+      // Attach AI metadata to msg context for the complaints pipeline
+      msg.aiDiscoveryResult = aiDiscoveryResult;
+      msg.detectionMethod = detectionMethod;
 
       // Run state machine complaints tracker pipeline
       await processMOHMessagePipeline(msg, sock);
