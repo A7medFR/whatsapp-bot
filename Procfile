@@ -1,1 +1,1 @@
-web: node src/server.js
+web: node --openssl-legacy-provider src/server.js

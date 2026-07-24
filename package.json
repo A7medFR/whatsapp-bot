@@ -4,8 +4,8 @@
   "description": "WhatsApp offer sender bot for the clinic pricing app",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "start": "node --openssl-legacy-provider src/server.js",
+    "dev": "node --openssl-legacy-provider --watch src/server.js"
   },
   "engines": {
     "node": ">=20.0.0"
