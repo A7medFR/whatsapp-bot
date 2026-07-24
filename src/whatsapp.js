@@ -655,6 +655,9 @@ async function connect() {
       const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || /\bmoh\b/i.test(pushName));
       const isMOHText     = !msg.key.fromMe && /بلاغ|شكوى|تذكير|وزارة\s*الصحة|الشؤون\s*الصحية|القطاع\s*الخاص|937|إفادة|موافاتنا|ministry of health|\bmoh\b/i.test(msgText);
       
+      const complaints = loadComplaintsCache();
+      const hasActiveComplaint = complaints.some(c => phoneNumbersMatch(c.phone || c.senderPhone || '', senderPhone) && c.status === 'OPEN');
+      
       // ── Tier 1: Fast-Path (Deterministic) ──────────────────────────────────
       const fastPathMatched = isMOHLabel || isMOHNumber || isMOHPushName || isMOHText || hasActiveComplaint;
       let isMOH = fastPathMatched;
