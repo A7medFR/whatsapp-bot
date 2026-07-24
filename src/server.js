@@ -70,6 +70,19 @@ global.broadcastLog = (log) => {
   });
 };
 
+// ─── Health Check & Safety Handlers ─────────────────────────────────────────
+app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', uptime: process.uptime() }));
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ [Uncaught Exception]:', err);
+  if (global.logEvent) global.logEvent(`❌ [Uncaught Exception]: ${err.message}`, 'error');
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ [Unhandled Rejection]:', reason);
+  if (global.logEvent) global.logEvent(`❌ [Unhandled Rejection]: ${reason}`, 'error');
+});
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 /** Premium Diagnostics Dashboard & Live Console UI */
