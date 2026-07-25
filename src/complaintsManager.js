@@ -364,8 +364,10 @@ async function processMOHMessagePipeline(msg, sock) {
   }
 
   // ----------------------------------------------------
-  // CASE B: INBOUND MESSAGE (from MOH Officer)
-  // Gemini AI classifies every message. Nothing is ignored.
+  // CASE B: INBOUND MESSAGE (from confirmed MOH Officer)
+  // This pipeline is ONLY reached for phone numbers verified
+  // as MOH via MOH_NUMBERS env var, MOH label, or active ticket.
+  // Gemini AI classifies inbound messages only — never outbound.
   // ----------------------------------------------------
 
   // Step 1: Ask Gemini AI to classify and extract metadata

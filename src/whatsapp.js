@@ -376,10 +376,8 @@ async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shoul
   if (draftReply) {
     alertText += `\n💡 *مقترح الرد من الذكاء الاصطناعي:*\n_${draftReply}_\n`;
   }
-
-  alertText += `\n⚙️ _تم توثيق وتوجيه الرسالة تلقائياً بواسطة محرك الذكاء الاصطناعي_`;
   
-  await triggerAdminAlert(sock, alertText, originalMsg);
+  await triggerAdminAlert(sock, alertText.trimEnd(), originalMsg);
 }
 
 async function sendReminderAdminAlert(sock, phone, name, reminderCount, text, originalMsg = null, extraMeta = {}) {
@@ -652,43 +650,20 @@ async function connect() {
 
       const isMOHLabel    = mohLabelId && knownLabels.includes(String(mohLabelId));
       const isMOHNumber   = MOH_NUMBERS.some(num => phoneNumbersMatch(senderPhone, num)) || dynamicMOHNumbers.has(senderPhone);
-      const isMOHPushName = !msg.key.fromMe && (pushName.includes('وزارة الصحة') || pushName.toLowerCase().includes('ministry of health') || /\bmoh\b/i.test(pushName));
-      const isMOHText     = !msg.key.fromMe && /بلاغ|شكوى|تذكير|وزارة\s*الصحة|الشؤون\s*الصحية|القطاع\s*الخاص|937|إفادة|موافاتنا|ministry of health|\bmoh\b/i.test(msgText);
       
       const complaints = loadComplaintsCache();
       const hasActiveComplaint = complaints.some(c => phoneNumbersMatch(c.phone || c.senderPhone || '', senderPhone) && c.status === 'OPEN');
       
-      // ── Tier 1: Fast-Path (Deterministic) ──────────────────────────────────
-      const fastPathMatched = isMOHLabel || isMOHNumber || isMOHPushName || isMOHText || hasActiveComplaint;
-      let isMOH = fastPathMatched;
-      let detectionMethod = fastPathMatched ? 'FAST_PATH' : null;
-      let aiDiscoveryResult = null;
+      // ── STRICT GATE: Only process messages from configured MOH numbers ──────
+      // Gemini AI is NEVER invoked for any number not in MOH_NUMBERS or MOH label.
+      // This is the primary defence against exceeding Gemini API rate limits.
+      const isMOH = isMOHLabel || isMOHNumber || hasActiveComplaint;
+      const detectionMethod = isMOH
+        ? (isMOHNumber ? 'MOH_NUMBER' : isMOHLabel ? 'MOH_LABEL' : 'ACTIVE_COMPLAINT')
+        : null;
 
-      // ── Tier 2: AI Discovery Path (Smart Classifier for Unknown Senders) ────
-      if (!isMOH && !msg.key.fromMe) {
-        try {
-          aiDiscoveryResult = await geminiService.classifyIncomingMOHMessage({
-            phone: senderPhone,
-            pushName,
-            messageText: msgText,
-            hasAttachment: hasAttachment(msg)
-          });
-
-          if (aiDiscoveryResult && aiDiscoveryResult.isMOH && (aiDiscoveryResult.confidence || 0) >= 0.70) {
-            isMOH = true;
-            detectionMethod = 'AI_DISCOVERY';
-            logEvent(`⚡ [AI Discovery Promotion] Sender +${senderPhone} promoted to MOH (Confidence: ${aiDiscoveryResult.confidence}, Reason: ${aiDiscoveryResult.reasoning})`, 'info');
-          }
-        } catch (aiErr) {
-          logEvent(`⚠️ AI Discovery check error for +${senderPhone}: ${aiErr.message}`, 'warn');
-        }
-      }
-
-      // ── Gate check ────────────────────────────────────────────────────────────
+      // ── Hard gate: skip all non-MOH messages silently ─────────────────────
       if (!isMOH) {
-        if (!msg.key.fromMe && (msgText || pushName)) {
-          logEvent(`ℹ️ [Skipped Non-MOH Message] from: +${senderPhone} (Name: "${pushName}") | Text: "${msgText.slice(0, 40)}" | Skipped by Fast-Path & AI Discovery.`, 'info');
-        }
         continue;
       }
 
@@ -702,10 +677,10 @@ async function connect() {
         });
       }
 
-      logEvent(`📨 [MOH Message Confirmed] from: +${senderPhone} (Name: "${pushName}") | Method: ${detectionMethod} | matched: [Number:${isMOHNumber}, Label:${isMOHLabel}, PushName:${isMOHPushName}, Keywords:${isMOHText}, ActiveComplaint:${hasActiveComplaint}]`, 'info');
+      logEvent(`📨 [MOH Message Confirmed] from: +${senderPhone} (Name: "${pushName}") | Method: ${detectionMethod} | matched: [Number:${isMOHNumber}, Label:${isMOHLabel}, ActiveComplaint:${hasActiveComplaint}] → AI pipeline will run.`, 'info');
 
-      // Attach AI metadata to msg context for the complaints pipeline
-      msg.aiDiscoveryResult = aiDiscoveryResult;
+      // Attach detection metadata to msg context for the complaints pipeline
+      msg.aiDiscoveryResult = null;
       msg.detectionMethod = detectionMethod;
 
       // Run state machine complaints tracker pipeline
