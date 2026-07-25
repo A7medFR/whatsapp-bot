@@ -324,6 +324,11 @@ function getMessageText(msg) {
 }
 
 async function triggerAdminAlert(sock, text, originalMsg = null) {
+  // Strict Guard: Outbound messages (sent by clinic staff) must NEVER be forwarded to admin numbers
+  if (originalMsg && originalMsg.key && originalMsg.key.fromMe) {
+    return;
+  }
+
   if (FORWARD_NUMBERS.length === 0) {
     logEvent(`⚠️ Alert forwarding aborted: FORWARD_NUMBERS is empty in .env.`, 'warn');
     return;
@@ -357,6 +362,11 @@ async function triggerAdminAlert(sock, text, originalMsg = null) {
 }
 
 async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shouldIncludeCounter = true, originalMsg = null, extraMeta = {}) {
+  // Strict Guard: Outbound messages from clinic staff are never forwarded to admins
+  if (originalMsg && originalMsg.key && originalMsg.key.fromMe) {
+    return;
+  }
+
   const urgency = extraMeta?.urgency || 'HIGH';
   const urgencyIcon = urgency === 'CRITICAL' ? '🔥' : urgency === 'HIGH' ? '🚨' : '⚠️';
   const category = extraMeta?.category || 'بلاغ جديد';
@@ -381,6 +391,11 @@ async function sendAdminAlertWithCounter(sock, phone, name, counter, text, shoul
 }
 
 async function sendReminderAdminAlert(sock, phone, name, reminderCount, text, originalMsg = null, extraMeta = {}) {
+  // Strict Guard: Outbound messages from clinic staff are never forwarded to admins
+  if (originalMsg && originalMsg.key && originalMsg.key.fromMe) {
+    return;
+  }
+
   const ticketId = extraMeta?.ticketId || 'MOH-قيد_المعالجة';
   const draftReply = extraMeta?.draftReply || '';
 
@@ -677,7 +692,12 @@ async function connect() {
         });
       }
 
-      logEvent(`📨 [MOH Message Confirmed] from: +${senderPhone} (Name: "${pushName}") | Method: ${detectionMethod} | matched: [Number:${isMOHNumber}, Label:${isMOHLabel}, ActiveComplaint:${hasActiveComplaint}] → AI pipeline will run.`, 'info');
+      const isOutboundMsg = !!msg.key?.fromMe;
+      if (isOutboundMsg) {
+        logEvent(`📤 [Outbound Clinic Reply] to: +${senderPhone} | Checking attachment status to update complaint state (no AI call, no admin forward).`, 'info');
+      } else {
+        logEvent(`📨 [Inbound MOH Message] from: +${senderPhone} (Name: "${pushName}") | Method: ${detectionMethod} → AI pipeline & admin alerts running.`, 'info');
+      }
 
       // Attach detection metadata to msg context for the complaints pipeline
       msg.aiDiscoveryResult = null;
