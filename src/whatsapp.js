@@ -168,6 +168,7 @@ let sock     = null;
 let isReady  = false;
 let qrString = null;
 let currentPairingCode = null;
+let badSessionRetries = 0;  // prevent infinite badSession loops
 
 const labelsStore = {};   // labelId → { id, name, color }
 const chatLabels  = {};   // jid     → Set<labelId>
@@ -237,6 +238,7 @@ async function resetSession() {
   isReady = false;
   qrString = null;
   currentPairingCode = null;
+  badSessionRetries = 0;
   clearAuthSession();
   setTimeout(() => connect(), 800);
 }
@@ -706,11 +708,17 @@ async function connect() {
   // AUTH_DIR is defined at module level (near requestPairingCode)
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   
-  // If creds.me exists but it's not registered, delete corrupted/stale credentials so we don't get badSession (500)
-  if (state.creds && state.creds.me && !state.creds.registered) {
-    console.log('⚠️ [Auth] Found unregistered credentials in auth folder. Resetting auth to prevent badSession (500)...');
-    clearAuthSession();
-  }
+  // NOTE: After a QR scan, creds.me is set but registered remains false until
+  // the second handshake completes. Do NOT clear or modify auth state here —
+  // let Baileys handle the authentication lifecycle naturally.
+  // The badSession/loggedOut handlers in connection.update will wipe truly
+  // corrupted sessions automatically.
+  
+  // Debug: log auth state so we can see what Baileys is working with
+  const hasMe = !!state.creds?.me;
+  const isReg = !!state.creds?.registered;
+  const meId = state.creds?.me?.id || 'none';
+  console.log(`📋 [Auth] creds.me=${hasMe} (${meId}), registered=${isReg}`);
 
   const { version }          = await fetchLatestBaileysVersion();
 
@@ -935,6 +943,7 @@ async function connect() {
       isReady  = true;
       qrString = null;
       currentPairingCode = null;
+      badSessionRetries = 0;  // Reset counter on successful connection
       console.log('\n✅ WhatsApp connected!');
 
       if (LEADS_LABEL_ID) {
@@ -969,10 +978,16 @@ async function connect() {
       const isBadSession = code === DisconnectReason.badSession || code === 500;
       
       if (isLoggedOut || isBadSession) {
-        logEvent(`❌ Session invalid/corrupted (${reason} ${code}). Resetting session and generating fresh QR...`, 'warn');
-        console.log(`❌ Session invalid (${reason} ${code}). Resetting session folder...`);
+        badSessionRetries++;
+        if (badSessionRetries > 3) {
+          logEvent(`🛑 Too many badSession retries (${badSessionRetries}). Stopping auto-reconnect. Use Reset Session button to try again.`, 'error');
+          console.log('🛑 Too many badSession retries. Stopping. Use the Reset Session button in the dashboard.');
+          return;
+        }
+        logEvent(`❌ Session invalid/corrupted (${reason} ${code}). Attempt ${badSessionRetries}/3 — Resetting session and generating fresh QR...`, 'warn');
+        console.log(`❌ Session invalid (${reason} ${code}). Attempt ${badSessionRetries}/3 — Resetting session folder...`);
         clearAuthSession();
-        setTimeout(() => connect(), 1200);
+        setTimeout(() => connect(), 2000);
         return;
       }
 
