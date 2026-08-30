@@ -13,7 +13,6 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  makeInMemoryStore,
   Browsers,
 } = require('@whiskeysockets/baileys');
 const pino   = require('pino');
@@ -25,7 +24,66 @@ const geminiService = require('./geminiService');
 const db = require('./db');
 const complaintsManager = require('./complaintsManager');
 
-const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
+/**
+ * Lightweight, crash-proof in-memory store.
+ * Replaces deprecated Baileys makeInMemoryStore to prevent startup crashes.
+ */
+function createInMemoryStore() {
+  const s = {
+    messages: {},
+    chats: {},
+    contacts: {},
+    bind(ev) {
+      if (!ev) return;
+      ev.on('messages.upsert', ({ messages }) => {
+        for (const msg of messages || []) {
+          const jid = msg.key?.remoteJid;
+          if (!jid) continue;
+          if (!s.messages[jid]) s.messages[jid] = [];
+          const idx = s.messages[jid].findIndex(m => m.key?.id === msg.key?.id);
+          if (idx >= 0) {
+            s.messages[jid][idx] = msg;
+          } else {
+            s.messages[jid].push(msg);
+            if (s.messages[jid].length > 200) s.messages[jid].shift();
+          }
+        }
+      });
+      ev.on('chats.set', ({ chats }) => {
+        for (const c of chats || []) {
+          if (c?.id) s.chats[c.id] = c;
+        }
+      });
+      ev.on('contacts.set', ({ contacts }) => {
+        for (const c of contacts || []) {
+          if (c?.id) s.contacts[c.id] = c;
+        }
+      });
+    },
+    readFromFile(file) {
+      try {
+        if (fs.existsSync(file)) {
+          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+          if (data.messages) s.messages = data.messages;
+          if (data.chats) s.chats = data.chats;
+          if (data.contacts) s.contacts = data.contacts;
+        }
+      } catch (_) {}
+    },
+    writeToFile(file) {
+      try {
+        fs.writeFileSync(file, JSON.stringify({
+          messages: s.messages,
+          chats: s.chats,
+          contacts: s.contacts
+        }, null, 2), 'utf8');
+      } catch (_) {}
+    }
+  };
+  return s;
+}
+
+const store = createInMemoryStore();
 const STORE_FILE = path.resolve('./baileys_store.json');
 // Persist store to disk so message history survives restarts
 try { if (fs.existsSync(STORE_FILE)) store.readFromFile(STORE_FILE); } catch (_) { /* first run */ }
