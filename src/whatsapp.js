@@ -14,6 +14,7 @@ const {
   DisconnectReason,
   fetchLatestBaileysVersion,
   Browsers,
+  makeCacheableSignalKeyStore,
 } = require('@whiskeysockets/baileys');
 const pino   = require('pino');
 const qrcode = require('qrcode-terminal');
@@ -59,6 +60,10 @@ function createInMemoryStore() {
           if (c?.id) s.contacts[c.id] = c;
         }
       });
+    },
+    loadMessage(jid, id) {
+      if (!s.messages[jid]) return undefined;
+      return s.messages[jid].find(m => m.key?.id === id);
     },
     readFromFile(file) {
       try {
@@ -349,7 +354,10 @@ async function requestPairingCode(phone) {
 
   const freshSock = makeWASocket({
     version,
-    auth: freshState,
+    auth: {
+      creds: freshState.creds,
+      keys: makeCacheableSignalKeyStore(freshState.keys, pino({ level: 'silent' })),
+    },
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
     browser: Browsers.macOS('Chrome'),
@@ -359,6 +367,13 @@ async function requestPairingCode(phone) {
     markOnlineOnConnect:   false,
     syncFullHistory:       false,
     generateHighQualityLinkPreview: false,
+    getMessage: async (key) => {
+      if (store && key?.remoteJid) {
+        const msg = store.loadMessage(key.remoteJid, key.id);
+        return msg?.message || undefined;
+      }
+      return undefined;
+    },
   });
 
   freshSock.ev.on('creds.update', freshSaveCreds);
@@ -597,7 +612,7 @@ async function triggerAdminAlert(sock, text, originalMsg = null) {
   for (const num of FORWARD_NUMBERS) {
     const recipientJid = `${num}@s.whatsapp.net`;
     
-    // 1. Send the text alert
+    // 1. Send the comprehensive, cleanly formatted text alert
     try {
       await sock.sendMessage(recipientJid, { text });
       logEvent(`   ✅ Alert forwarded successfully to +${num}`, 'info');
@@ -605,13 +620,24 @@ async function triggerAdminAlert(sock, text, originalMsg = null) {
       logEvent(`   ❌ Alert forwarding failed to +${num}: ${err.message}`, 'error');
     }
 
-    // 2. Forward the original message if provided
-    if (originalMsg) {
+    // 2. Only forward if the original message actually has media attachments (image, document, audio, video)
+    // Pure text is already included in full in the text alert above. Forwarding raw external E2EE text messages
+    // causes cross-session ratchet desync ("Waiting for this message. This may take a while") on recipient phones.
+    const messageContent = originalMsg?.message;
+    const isMedia = messageContent && (
+      messageContent.imageMessage ||
+      messageContent.documentMessage ||
+      messageContent.audioMessage ||
+      messageContent.videoMessage ||
+      messageContent.stickerMessage
+    );
+
+    if (originalMsg && isMedia) {
       try {
         await sock.sendMessage(recipientJid, { forward: originalMsg });
-        logEvent(`   ✅ Original message forwarded successfully to +${num}`, 'info');
+        logEvent(`   ✅ Attached media forwarded successfully to +${num}`, 'info');
       } catch (err) {
-        logEvent(`   ❌ Original message forwarding failed to +${num}: ${err.message}`, 'error');
+        logEvent(`   ❌ Attached media forwarding failed to +${num}: ${err.message}`, 'error');
       }
     }
   }
@@ -791,7 +817,10 @@ async function connect() {
 
   sock = makeWASocket({
     version,
-    auth:   state,
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+    },
     logger: pino({ level: 'silent' }),
     browser: Browsers.macOS('Desktop'),
     connectTimeoutMs:      30000,
@@ -800,6 +829,13 @@ async function connect() {
     markOnlineOnConnect:   false,
     syncFullHistory:       false,
     generateHighQualityLinkPreview: false,
+    getMessage: async (key) => {
+      if (store && key?.remoteJid) {
+        const msg = store.loadMessage(key.remoteJid, key.id);
+        return msg?.message || undefined;
+      }
+      return undefined;
+    },
     qrTimeout:             300000, // Wait up to 5 minutes for QR scan
   });
 

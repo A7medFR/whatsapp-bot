@@ -217,9 +217,9 @@ ${JSON.stringify(activeTickets.map(t => ({ ticketId: t.ticketId || t.complaintId
 
 4. **REMINDER SEQUENCE NUMBER**: If isReminder is true and the message specifies a sequence number (e.g., "تذكير رقم 3", "التذكير الثالث", "تذكير ثاني"), extract it as an integer. Otherwise return null.
 
-5. **COMPLAINT SUMMARY**: Concise 1-sentence Arabic summary of what the complaint is about.
+5. **COMPLAINT SUMMARY**: Concise 1-sentence Arabic summary of what the complaint is about. Note: "inspection" in clinic context means medical examination/checkup ("فحص"), not "تفتيش".
 
-6. **CATEGORY**: One of: "أوقات الانتظار" | "سلوك الموظفين" | "الفواتير والأسعار" | "جودة العلاج" | "أخرى"
+6. **CATEGORY**: One of: "أوقات الانتظار" | "سلوك الموظفين" | "الفواتير والأسعار" | "جودة العلاج" | "الفحص والكشف الطبي" | "أخرى"
 
 7. **DRAFT REPLY**: Professional Arabic reply for clinic staff. Scale urgency by reminder count in Ledger:
    - 0 reminders: Standard polite acknowledgment.
@@ -561,7 +561,7 @@ Message Telemetry:
 
 Classification Criteria for isMOH = true:
 1. Mentions ticket/complaint keywords (e.g., "بلاغ رقم", "شكوى رقم", "إفادة", "تذكير", "وزارة الصحة", "الشؤون الصحية", "937", "القطاع الخاص", "المخالفات").
-2. Contains official regulatory tone, inspection notices, or requests official clinic responses within 24-48 hours.
+2. Contains official regulatory tone, compliance notices, or requests official clinic responses within 24-48 hours. (Note: "inspection" in patient/clinic records refers to "فحص" medical checkup, not "تفتيش").
 3. Contains attachments sent alongside regulatory inquiry terms.
 
 Return ONLY a JSON object with:
