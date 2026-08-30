@@ -204,41 +204,58 @@ try {
 }
 
 // ─── Number Pairing Code Authentication ───────────────────────────────────────
+/**
+ * Normalize a phone number for Baileys requestPairingCode.
+ * Baileys expects a plain digit string in international format (no + or spaces).
+ * e.g. '+966 533 267 493' → '966533267493'
+ * We deliberately do NOT apply formatJidNumber here because that helper is for
+ * converting *local* numbers (e.g. '0533...' → '966533...') and would leave an
+ * already-international number like '966533267493' unchanged anyway. Using it
+ * could cause subtle bugs if input edge-cases ever trigger its rules unexpectedly.
+ */
+function normalizePairingPhone(raw) {
+  // Strip everything that is not a digit
+  const digits = (raw || '').replace(/\D/g, '');
+  // WhatsApp phone numbers: minimum 7 digits (short), maximum 15 (E.164 spec)
+  if (!digits || digits.length < 7 || digits.length > 15) {
+    throw new Error(
+      `Invalid phone number "${raw}". Please enter the full number with country code and no + sign (e.g. 966533267493).`
+    );
+  }
+  return digits;
+}
+
 async function requestPairingCode(phone) {
   if (!sock) {
     throw new Error('WhatsApp socket is not initialized yet. Please wait a moment and try again.');
   }
   if (isReady) {
-    throw new Error('WhatsApp is already connected.');
+    throw new Error('WhatsApp is already connected. Disconnect first before linking a new device.');
   }
 
-  const rawClean = (phone || '').replace(/\D/g, '');
-  if (!rawClean || rawClean.length < 8) {
-    throw new Error('Please enter a valid phone number including country code (e.g. 9665xxxxxxxx).');
-  }
-
-  const formattedNumber = formatJidNumber(rawClean);
+  const normalizedPhone = normalizePairingPhone(phone);
 
   try {
-    const rawCode = await sock.requestPairingCode(formattedNumber);
+    console.log(`[Pairing] Requesting code for: ${normalizedPhone}`);
+    const rawCode = await sock.requestPairingCode(normalizedPhone);
     const formattedCode = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
     currentPairingCode = {
       code: rawCode,
       formattedCode: formattedCode,
-      phone: formattedNumber,
+      phone: normalizedPhone,
       timestamp: Date.now()
     };
 
-    logEvent(`🔢 WhatsApp Pairing Code generated: ${formattedCode} for +${formattedNumber}`, 'info');
+    logEvent(`🔢 WhatsApp Pairing Code generated: ${formattedCode} for +${normalizedPhone}`, 'info');
     console.log(`\n╔══════════════════════════════════════════╗`);
     console.log(`║  📱 WhatsApp Pairing Code: ${formattedCode.padEnd(14, ' ')}║`);
-    console.log(`║  Phone: +${formattedNumber.padEnd(30, ' ')}║`);
+    console.log(`║  Phone: +${normalizedPhone.padEnd(30, ' ')}║`);
     console.log(`║  Linked Devices → Link with phone number ║`);
     console.log(`╚══════════════════════════════════════════╝\n`);
 
     return currentPairingCode;
   } catch (err) {
-    logEvent(`❌ Failed to generate pairing code for +${formattedNumber}: ${err.message}`, 'error');
+    logEvent(`❌ Failed to generate pairing code for +${normalizedPhone}: ${err.message}`, 'error');
     throw err;
   }
 }

@@ -917,11 +917,14 @@ app.get('/', async (_req, res) => {
           <div id="view-phone" class="pairing-container" style="display: none;">
             <div class="pairing-form" id="pairing-input-section">
               <p style="font-size:0.85rem; color:var(--text-muted); margin:0 0 4px 0; line-height:1.4;">
-                Enter your WhatsApp phone number with country code to receive an 8-character connection code:
+                Enter the <strong>exact WhatsApp number of this account</strong> with country code — digits only, no + sign:
+              </p>
+              <p style="font-size:0.78rem; color:#f59e0b; margin:0 0 10px 0; line-height:1.4;">
+                ⚠️ This must be the same number registered in WhatsApp on your phone (e.g. 966533267493 for Saudi +966 533 267 493)
               </p>
               <div class="pairing-input-wrapper">
                 <span class="pairing-prefix">+</span>
-                <input type="tel" id="pairing-phone-input" class="pairing-input" placeholder="e.g. 966501234567 or 201012345678" autocomplete="tel" onkeydown="if(event.key==='Enter')handleRequestPairingCode()" />
+                <input type="tel" id="pairing-phone-input" class="pairing-input" placeholder="e.g. 966533267493" autocomplete="tel" onkeydown="if(event.key==='Enter')handleRequestPairingCode()" />
               </div>
               <button class="btn-pairing" id="btn-request-pairing" onclick="handleRequestPairingCode()">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -950,11 +953,12 @@ app.get('/', async (_req, res) => {
               <div class="instructions" style="margin-top:14px; text-align:left;">
                 <p style="font-weight:600; color:var(--accent-cyan); margin-bottom:4px;">How to link on your phone:</p>
                 <ol>
-                  <li>Open WhatsApp on your phone</li>
+                  <li>Open WhatsApp on your phone (the same number you entered above)</li>
                   <li>Tap <b>Menu (⋮)</b> (Android) or <b>Settings</b> (iOS)</li>
                   <li>Select <b>Linked Devices</b> → <b>Link a Device</b></li>
                   <li>Tap <b>Link with phone number instead</b></li>
-                  <li>Enter the 8-character code shown above</li>
+                  <li>WhatsApp will ask for your phone number — enter your own number to confirm</li>
+                  <li>Enter the 8-character code shown above on the screen that appears</li>
                 </ol>
               </div>
             </div>
