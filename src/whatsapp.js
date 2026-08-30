@@ -207,6 +207,40 @@ try {
 // ─── Number Pairing Code Authentication ───────────────────────────────────────
 const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
 
+function clearAuthSession() {
+  try {
+    if (fs.existsSync(AUTH_DIR)) {
+      const files = fs.readdirSync(AUTH_DIR);
+      for (const file of files) {
+        try {
+          fs.unlinkSync(path.join(AUTH_DIR, file));
+        } catch (_) {}
+      }
+      logEvent(`🗑️ Cleared ${files.length} auth session files from auth_info_baileys.`, 'info');
+    }
+  } catch (err) {
+    console.error('⚠️ Could not clear auth directory:', err.message);
+  }
+}
+
+async function resetSession() {
+  logEvent('🔄 Resetting WhatsApp session and restarting fresh connection...', 'info');
+  if (sock) {
+    try {
+      sock.ev.removeAllListeners('connection.update');
+      sock.ev.removeAllListeners('creds.update');
+      sock.ev.removeAllListeners('messages.upsert');
+      sock.end(undefined);
+    } catch (_) {}
+    sock = null;
+  }
+  isReady = false;
+  qrString = null;
+  currentPairingCode = null;
+  clearAuthSession();
+  setTimeout(() => connect(), 800);
+}
+
 /**
  * Normalize a phone number for Baileys requestPairingCode.
  * Baileys expects a plain digit string in international format (no + or spaces).
@@ -224,18 +258,6 @@ function normalizePairingPhone(raw) {
 
 /**
  * Request a pairing code for phone-number-based WhatsApp linking.
- *
- * CRITICAL: Baileys' requestPairingCode() only works on a FRESH, UNREGISTERED
- * socket. If the socket already has credentials (creds.me is set or registered
- * is true), WhatsApp will reject the pairing and show "Couldn't link device –
- * Check the phone number is correct on your device."
- *
- * To fix this, we:
- * 1. Clear the auth_info_baileys directory (remove all old credentials)
- * 2. Close the current socket
- * 3. Create a brand-new socket with fresh auth state
- * 4. Wait for the fresh socket to connect to WhatsApp servers
- * 5. Call sock.requestPairingCode(phoneNumber) on the fresh socket
  */
 async function requestPairingCode(phone) {
   const normalizedPhone = normalizePairingPhone(phone);
@@ -243,17 +265,7 @@ async function requestPairingCode(phone) {
   logEvent(`📱 Pairing code requested for +${normalizedPhone}. Preparing fresh connection...`, 'info');
 
   // ── Step 1: Clear old auth credentials ──────────────────────────────────────
-  try {
-    if (fs.existsSync(AUTH_DIR)) {
-      const files = fs.readdirSync(AUTH_DIR);
-      for (const file of files) {
-        fs.unlinkSync(path.join(AUTH_DIR, file));
-      }
-      logEvent(`🗑️  Cleared ${files.length} old auth files for fresh pairing.`, 'info');
-    }
-  } catch (err) {
-    logEvent(`⚠️  Could not clear auth directory: ${err.message}`, 'warn');
-  }
+  clearAuthSession();
 
   // ── Step 2: Close the existing socket ───────────────────────────────────────
   if (sock) {
@@ -694,11 +706,10 @@ async function connect() {
   // AUTH_DIR is defined at module level (near requestPairingCode)
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   
-  // In-memory bypass: if credentials (creds.me) exist but registered is false (common on abrupt shutdowns),
-  // force it to true so Baileys attempts to reconnect instead of redundantly asking for a QR scan.
+  // If creds.me exists but it's not registered, delete corrupted/stale credentials so we don't get badSession (500)
   if (state.creds && state.creds.me && !state.creds.registered) {
-    console.log('💡 [Auth] Found active credentials in creds.json but registered was false. Restoring registered: true to bypass QR scan.');
-    state.creds.registered = true;
+    console.log('⚠️ [Auth] Found unregistered credentials in auth folder. Resetting auth to prevent badSession (500)...');
+    clearAuthSession();
   }
 
   const { version }          = await fetchLatestBaileysVersion();
@@ -953,10 +964,18 @@ async function connect() {
       const code   = lastDisconnect?.error?.output?.statusCode;
       const reason = Object.entries(DisconnectReason).find(([, v]) => v === code)?.[0] || code;
       console.log(`\n⚠️  Disconnected: ${reason} (${code})`);
-      if (code === DisconnectReason.loggedOut) {
-        console.log('❌ Logged out. Delete auth_info_baileys/ and restart.');
+      
+      const isLoggedOut = code === DisconnectReason.loggedOut || code === 401;
+      const isBadSession = code === DisconnectReason.badSession || code === 500;
+      
+      if (isLoggedOut || isBadSession) {
+        logEvent(`❌ Session invalid/corrupted (${reason} ${code}). Resetting session and generating fresh QR...`, 'warn');
+        console.log(`❌ Session invalid (${reason} ${code}). Resetting session folder...`);
+        clearAuthSession();
+        setTimeout(() => connect(), 1200);
         return;
       }
+
       // When QR scan completes or restart is required, reconnect immediately (500ms) to finalize authentication
       const isRestart = code === DisconnectReason.restartRequired || code === 515 || !code;
       const d = isRestart ? 500 : (code === 405 ? 10000 : 3000);
@@ -1223,5 +1242,5 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, requestPairingCode, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels, addManualComplaint, updateManualComplaint, deleteComplaint };
+module.exports = { connect, sendMessage, getStatus, requestPairingCode, resetSession, clearAuthSession, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels, addManualComplaint, updateManualComplaint, deleteComplaint };
 

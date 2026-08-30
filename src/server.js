@@ -881,7 +881,13 @@ app.get('/', async (_req, res) => {
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
               Link Device
             </h3>
-            <span style="font-size:0.75rem; font-weight:600; color:var(--accent-cyan); background:rgba(6,182,212,0.12); padding:3px 8px; border-radius:6px; border:1px solid rgba(6,182,212,0.25);">WhatsApp Web</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button onclick="handleResetSession()" title="Clear invalid session & generate fresh QR" style="background:rgba(239,68,68,0.12); color:#ef4444; border:1px solid rgba(239,68,68,0.3); padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                Reset Session
+              </button>
+              <span style="font-size:0.75rem; font-weight:600; color:var(--accent-cyan); background:rgba(6,182,212,0.12); padding:3px 8px; border-radius:6px; border:1px solid rgba(6,182,212,0.25);">WhatsApp Web</span>
+            </div>
           </div>
 
           <!-- Mode Switcher Tabs -->
@@ -1287,6 +1293,22 @@ app.get('/', async (_req, res) => {
       }
     }
 
+    async function handleResetSession() {
+      if (!confirm('Reset WhatsApp session and generate a fresh QR code?')) return;
+      try {
+        const res = await fetch('/reset-session', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast('🔄 Session reset! Generating fresh QR code...');
+          resetPairingForm();
+        } else {
+          showToast('❌ ' + (data.error || 'Failed to reset session.'));
+        }
+      } catch (err) {
+        showToast('❌ Error resetting session.');
+      }
+    }
+
     // Poll status & handle grid state
     async function checkStatus() {
       try {
@@ -1397,6 +1419,16 @@ app.post(['/pairing-code', '/request-pairing-code'], async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to generate pairing code.' });
+  }
+});
+
+/** Reset / Clear WhatsApp Auth Session */
+app.post(['/reset-session', '/disconnect'], async (_req, res) => {
+  try {
+    await wa.resetSession();
+    res.json({ success: true, message: 'WhatsApp session cleared and restarting...' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
