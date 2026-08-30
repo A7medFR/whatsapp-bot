@@ -273,6 +273,8 @@ async function requestPairingCode(phone) {
   if (sock) {
     try {
       sock.ev.removeAllListeners('connection.update');
+      sock.ev.removeAllListeners('creds.update');
+      sock.ev.removeAllListeners('messages.upsert');
       sock.end(undefined);
     } catch (_) { /* ignore close errors */ }
     sock = null;
@@ -281,6 +283,9 @@ async function requestPairingCode(phone) {
   }
 
   // ── Step 3: Create a fresh socket with clean auth state ─────────────────────
+  // CRITICAL for pairing code:
+  //   - printQRInTerminal: false  (required — prevents conflict with pairing)
+  //   - browser: Browsers.macOS('Chrome')  (validated browser signature)
   const { state: freshState, saveCreds: freshSaveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -288,7 +293,8 @@ async function requestPairingCode(phone) {
     version,
     auth: freshState,
     logger: pino({ level: 'silent' }),
-    browser: Browsers.macOS('Desktop'),
+    printQRInTerminal: false,
+    browser: Browsers.macOS('Chrome'),
     connectTimeoutMs:      30000,
     defaultQueryTimeoutMs: 60000,
     keepAliveIntervalMs:   25000,
@@ -300,19 +306,19 @@ async function requestPairingCode(phone) {
   freshSock.ev.on('creds.update', freshSaveCreds);
 
   // ── Step 4: Wait for the socket to connect ──────────────────────────────────
-  // We need to wait until Baileys establishes the WebSocket connection to
-  // WhatsApp's servers. The socket will emit a QR code — that's our signal
-  // that the connection is ready and we can request a pairing code instead.
+  // Wait for the QR event (= socket is connected to WhatsApp servers),
+  // then add a 5-second delay to let the connection stabilize before
+  // requesting the pairing code. This prevents 428 Precondition errors.
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error('Timed out waiting for WhatsApp connection. Please try again.'));
-    }, 20000);
+    }, 25000);
 
     freshSock.ev.on('connection.update', (update) => {
       const { qr: gotQR, connection } = update;
       if (gotQR) {
-        // QR generated means the socket is connected and waiting for auth — perfect
         clearTimeout(timeout);
+        console.log('[Pairing] Socket connected. Waiting 5s for connection to stabilize...');
         resolve();
       }
       if (connection === 'close') {
@@ -322,8 +328,11 @@ async function requestPairingCode(phone) {
     });
   });
 
+  // ── Step 4b: Critical delay — let the WebSocket fully stabilize ─────────────
+  await new Promise(r => setTimeout(r, 5000));
+
   // ── Step 5: Request the pairing code on the fresh, unregistered socket ──────
-  console.log(`[Pairing] Socket ready. Requesting pairing code for: ${normalizedPhone}`);
+  console.log(`[Pairing] Requesting pairing code for: ${normalizedPhone}`);
   console.log(`[Pairing] creds.registered = ${freshState.creds.registered}, creds.me = ${JSON.stringify(freshState.creds.me)}`);
 
   const rawCode = await freshSock.requestPairingCode(normalizedPhone);
