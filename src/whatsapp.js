@@ -204,19 +204,15 @@ try {
 }
 
 // ─── Number Pairing Code Authentication ───────────────────────────────────────
+const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
+
 /**
  * Normalize a phone number for Baileys requestPairingCode.
  * Baileys expects a plain digit string in international format (no + or spaces).
  * e.g. '+966 533 267 493' → '966533267493'
- * We deliberately do NOT apply formatJidNumber here because that helper is for
- * converting *local* numbers (e.g. '0533...' → '966533...') and would leave an
- * already-international number like '966533267493' unchanged anyway. Using it
- * could cause subtle bugs if input edge-cases ever trigger its rules unexpectedly.
  */
 function normalizePairingPhone(raw) {
-  // Strip everything that is not a digit
   const digits = (raw || '').replace(/\D/g, '');
-  // WhatsApp phone numbers: minimum 7 digits (short), maximum 15 (E.164 spec)
   if (!digits || digits.length < 7 || digits.length > 15) {
     throw new Error(
       `Invalid phone number "${raw}". Please enter the full number with country code and no + sign (e.g. 966533267493).`
@@ -225,39 +221,156 @@ function normalizePairingPhone(raw) {
   return digits;
 }
 
+/**
+ * Request a pairing code for phone-number-based WhatsApp linking.
+ *
+ * CRITICAL: Baileys' requestPairingCode() only works on a FRESH, UNREGISTERED
+ * socket. If the socket already has credentials (creds.me is set or registered
+ * is true), WhatsApp will reject the pairing and show "Couldn't link device –
+ * Check the phone number is correct on your device."
+ *
+ * To fix this, we:
+ * 1. Clear the auth_info_baileys directory (remove all old credentials)
+ * 2. Close the current socket
+ * 3. Create a brand-new socket with fresh auth state
+ * 4. Wait for the fresh socket to connect to WhatsApp servers
+ * 5. Call sock.requestPairingCode(phoneNumber) on the fresh socket
+ */
 async function requestPairingCode(phone) {
-  if (!sock) {
-    throw new Error('WhatsApp socket is not initialized yet. Please wait a moment and try again.');
-  }
-  if (isReady) {
-    throw new Error('WhatsApp is already connected. Disconnect first before linking a new device.');
-  }
-
   const normalizedPhone = normalizePairingPhone(phone);
 
+  logEvent(`📱 Pairing code requested for +${normalizedPhone}. Preparing fresh connection...`, 'info');
+
+  // ── Step 1: Clear old auth credentials ──────────────────────────────────────
   try {
-    console.log(`[Pairing] Requesting code for: ${normalizedPhone}`);
-    const rawCode = await sock.requestPairingCode(normalizedPhone);
-    const formattedCode = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
-    currentPairingCode = {
-      code: rawCode,
-      formattedCode: formattedCode,
-      phone: normalizedPhone,
-      timestamp: Date.now()
-    };
-
-    logEvent(`🔢 WhatsApp Pairing Code generated: ${formattedCode} for +${normalizedPhone}`, 'info');
-    console.log(`\n╔══════════════════════════════════════════╗`);
-    console.log(`║  📱 WhatsApp Pairing Code: ${formattedCode.padEnd(14, ' ')}║`);
-    console.log(`║  Phone: +${normalizedPhone.padEnd(30, ' ')}║`);
-    console.log(`║  Linked Devices → Link with phone number ║`);
-    console.log(`╚══════════════════════════════════════════╝\n`);
-
-    return currentPairingCode;
+    if (fs.existsSync(AUTH_DIR)) {
+      const files = fs.readdirSync(AUTH_DIR);
+      for (const file of files) {
+        fs.unlinkSync(path.join(AUTH_DIR, file));
+      }
+      logEvent(`🗑️  Cleared ${files.length} old auth files for fresh pairing.`, 'info');
+    }
   } catch (err) {
-    logEvent(`❌ Failed to generate pairing code for +${normalizedPhone}: ${err.message}`, 'error');
-    throw err;
+    logEvent(`⚠️  Could not clear auth directory: ${err.message}`, 'warn');
   }
+
+  // ── Step 2: Close the existing socket ───────────────────────────────────────
+  if (sock) {
+    try {
+      sock.ev.removeAllListeners('connection.update');
+      sock.end(undefined);
+    } catch (_) { /* ignore close errors */ }
+    sock = null;
+    isReady = false;
+    qrString = null;
+  }
+
+  // ── Step 3: Create a fresh socket with clean auth state ─────────────────────
+  const { state: freshState, saveCreds: freshSaveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  const { version } = await fetchLatestBaileysVersion();
+
+  const freshSock = makeWASocket({
+    version,
+    auth: freshState,
+    logger: pino({ level: 'silent' }),
+    browser: ['Windows', 'Chrome', '122.0.0.0'],
+    connectTimeoutMs:      30000,
+    defaultQueryTimeoutMs: 60000,
+    keepAliveIntervalMs:   25000,
+    markOnlineOnConnect:   false,
+  });
+
+  freshSock.ev.on('creds.update', freshSaveCreds);
+
+  // ── Step 4: Wait for the socket to connect ──────────────────────────────────
+  // We need to wait until Baileys establishes the WebSocket connection to
+  // WhatsApp's servers. The socket will emit a QR code — that's our signal
+  // that the connection is ready and we can request a pairing code instead.
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Timed out waiting for WhatsApp connection. Please try again.'));
+    }, 20000);
+
+    freshSock.ev.on('connection.update', (update) => {
+      const { qr: gotQR, connection } = update;
+      if (gotQR) {
+        // QR generated means the socket is connected and waiting for auth — perfect
+        clearTimeout(timeout);
+        resolve();
+      }
+      if (connection === 'close') {
+        clearTimeout(timeout);
+        reject(new Error('Connection closed before pairing could be initiated.'));
+      }
+    });
+  });
+
+  // ── Step 5: Request the pairing code on the fresh, unregistered socket ──────
+  console.log(`[Pairing] Socket ready. Requesting pairing code for: ${normalizedPhone}`);
+  console.log(`[Pairing] creds.registered = ${freshState.creds.registered}, creds.me = ${JSON.stringify(freshState.creds.me)}`);
+
+  const rawCode = await freshSock.requestPairingCode(normalizedPhone);
+  const formattedCode = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+
+  // Store the pairing state
+  currentPairingCode = {
+    code: rawCode,
+    formattedCode: formattedCode,
+    phone: normalizedPhone,
+    timestamp: Date.now()
+  };
+
+  // ── Replace the module-level sock with the fresh one ────────────────────────
+  // When the user enters the code on their phone and it succeeds, the
+  // connection.update event on freshSock will fire with connection='open'.
+  // We need this socket to become the main bot socket.
+  sock = freshSock;
+
+  // Re-bind the connection lifecycle handler so the bot works after linking
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      qrString = qr;
+      isReady = false;
+    }
+
+    if (connection === 'open') {
+      isReady = true;
+      qrString = null;
+      currentPairingCode = null;
+      logEvent('✅ WhatsApp connected via pairing code!', 'info');
+      console.log('\n✅ WhatsApp connected via pairing code!');
+    }
+
+    if (connection === 'close') {
+      isReady = false;
+      qrString = null;
+      const code = lastDisconnect?.error?.output?.statusCode;
+      const reason = Object.entries(DisconnectReason).find(([, v]) => v === code)?.[0] || code;
+      console.log(`\n⚠️  Disconnected after pairing: ${reason} (${code})`);
+      if (code === DisconnectReason.loggedOut) {
+        console.log('❌ Logged out. Delete auth_info_baileys/ and restart.');
+        return;
+      }
+      const d = code === 405 ? 10000 : 5000;
+      console.log(`🔄 Reconnecting in ${d / 1000}s...\n`);
+      setTimeout(() => connect(), d);
+    }
+  });
+
+  // Bind store to new socket
+  store.bind(sock.ev);
+
+  logEvent(`🔢 Pairing Code generated: ${formattedCode} for +${normalizedPhone}`, 'info');
+  console.log(`\n╔══════════════════════════════════════════╗`);
+  console.log(`║  📱 WhatsApp Pairing Code: ${formattedCode.padEnd(14, ' ')}║`);
+  console.log(`║  Phone: +${normalizedPhone.padEnd(30, ' ')}║`);
+  console.log(`║  Go to Linked Devices → Link with        ║`);
+  console.log(`║  phone number instead → enter this code   ║`);
+  console.log(`╚══════════════════════════════════════════╝\n`);
+
+  return currentPairingCode;
 }
 
 const getStatus = () => ({ connected: isReady, hasQR: !!qrString, qr: qrString, pairingCode: currentPairingCode });
@@ -563,7 +676,7 @@ async function connect() {
     }
   } catch (_) {}
 
-  const AUTH_DIR = path.resolve(__dirname, '../auth_info_baileys');
+  // AUTH_DIR is defined at module level (near requestPairingCode)
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   
   // In-memory bypass: if credentials (creds.me) exist but registered is false (common on abrupt shutdowns),
