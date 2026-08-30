@@ -345,6 +345,46 @@ app.get('/', async (_req, res) => {
       color: var(--text-main);
     }
 
+    /* Mode Switcher Tabs */
+    .link-mode-tabs {
+      display: flex;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 20px;
+      gap: 4px;
+    }
+
+    .link-mode-tab {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .link-mode-tab.active {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      box-shadow: 0 2px 8px rgba(6, 182, 212, 0.15);
+    }
+
+    .link-mode-tab:hover:not(.active) {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
     /* QR Code styles */
     .qr-container {
       display: flex;
@@ -352,13 +392,14 @@ app.get('/', async (_req, res) => {
       align-items: center;
       justify-content: center;
       flex: 1;
+      width: 100%;
     }
 
     #qr-img {
       border: 8px solid #ffffff;
       border-radius: 16px;
-      width: 220px;
-      height: 220px;
+      width: 210px;
+      height: 210px;
       display: block;
       box-shadow: 0 10px 25px rgba(0,0,0,0.3);
       transition: opacity 0.3s;
@@ -368,12 +409,146 @@ app.get('/', async (_req, res) => {
       opacity: 0.2;
     }
 
-    .instructions {
+    /* Pairing Code Styles */
+    .pairing-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      flex: 1;
+    }
+
+    .pairing-form {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .pairing-input-wrapper {
+      display: flex;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 4px 12px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .pairing-input-wrapper:focus-within {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+    }
+
+    .pairing-prefix {
+      color: var(--accent-cyan);
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-right: 8px;
+      user-select: none;
+    }
+
+    .pairing-input {
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 0.95rem;
+      font-family: inherit;
+      width: 100%;
+      padding: 8px 0;
+      outline: none;
+    }
+
+    .pairing-input::placeholder {
+      color: #475569;
+    }
+
+    .btn-pairing {
+      background: linear-gradient(135deg, #06b6d4, #0284c7);
+      color: #ffffff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: 600;
       font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(6, 182, 212, 0.3);
+      transition: all 0.2s;
+    }
+
+    .btn-pairing:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4);
+    }
+
+    .btn-pairing:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .pairing-code-display {
+      width: 100%;
+      background: rgba(6, 182, 212, 0.05);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      animation: fadeInModal 0.3s ease;
+    }
+
+    .pairing-code-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-family: 'Fira Code', 'Courier New', monospace;
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: 4px;
+      color: #38bdf8;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 15px rgba(56, 189, 248, 0.15);
+      margin-bottom: 12px;
+      user-select: all;
+    }
+
+    .pairing-code-actions {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .link-alt-btn {
+      background: none;
+      border: none;
+      color: var(--accent-cyan);
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin-top: 14px;
+      text-decoration: underline;
+      opacity: 0.85;
+      transition: opacity 0.2s;
+    }
+
+    .link-alt-btn:hover {
+      opacity: 1;
+    }
+
+    .instructions {
+      font-size: 0.82rem;
       color: var(--text-muted);
       line-height: 1.5;
-      margin-top: 20px;
+      margin-top: 16px;
       text-align: center;
+      width: 100%;
     }
 
     .instructions ol {
@@ -699,22 +874,94 @@ app.get('/', async (_req, res) => {
       </div>
 
       <div id="main-grid-element" class="main-grid">
-        <!-- QR Card (Rendered dynamic) -->
+        <!-- Link Device Card (QR Code & Phone Number Pairing Code) -->
         <div id="qr-card" class="card" style="display: none;">
-          <h3 class="card-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-            Link Device
-          </h3>
-          <div class="qr-container">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+            <h3 class="card-title" style="margin-bottom: 0;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+              Link Device
+            </h3>
+            <span style="font-size:0.75rem; font-weight:600; color:var(--accent-cyan); background:rgba(6,182,212,0.12); padding:3px 8px; border-radius:6px; border:1px solid rgba(6,182,212,0.25);">WhatsApp Web</span>
+          </div>
+
+          <!-- Mode Switcher Tabs -->
+          <div class="link-mode-tabs">
+            <button id="tab-qr" class="link-mode-tab active" onclick="switchLinkMode('qr')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              QR Code
+            </button>
+            <button id="tab-phone" class="link-mode-tab" onclick="switchLinkMode('phone')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Link with Phone Number
+            </button>
+          </div>
+
+          <!-- Tab 1: QR Code View -->
+          <div id="view-qr" class="qr-container">
             <img id="qr-img" src="" alt="Scan QR" />
             <div class="instructions">
-              <p>Link this phone to WhatsApp Business:</p>
+              <p>Scan with WhatsApp Business / Personal:</p>
               <ol>
-                <li>Open WhatsApp Business on clinic device</li>
+                <li>Open WhatsApp on your phone</li>
                 <li>Tap <b>Menu (⋮)</b> or <b>Settings</b></li>
                 <li>Select <b>Linked Devices</b> → <b>Link a Device</b></li>
+                <li>Point your phone to this screen</li>
               </ol>
+              <button class="link-alt-btn" onclick="switchLinkMode('phone')">
+                Or link with phone number instead →
+              </button>
             </div>
+          </div>
+
+          <!-- Tab 2: Phone Number Pairing Code View -->
+          <div id="view-phone" class="pairing-container" style="display: none;">
+            <div class="pairing-form" id="pairing-input-section">
+              <p style="font-size:0.85rem; color:var(--text-muted); margin:0 0 4px 0; line-height:1.4;">
+                Enter your WhatsApp phone number with country code to receive an 8-character connection code:
+              </p>
+              <div class="pairing-input-wrapper">
+                <span class="pairing-prefix">+</span>
+                <input type="tel" id="pairing-phone-input" class="pairing-input" placeholder="e.g. 966501234567 or 201012345678" autocomplete="tel" onkeydown="if(event.key==='Enter')handleRequestPairingCode()" />
+              </div>
+              <button class="btn-pairing" id="btn-request-pairing" onclick="handleRequestPairingCode()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span id="btn-request-text">Get Pairing Code</span>
+              </button>
+            </div>
+
+            <!-- Pairing Code Result Display -->
+            <div id="pairing-result-section" class="pairing-code-display" style="display: none;">
+              <p style="font-size:0.8rem; color:var(--text-muted); margin:0 0 8px 0; text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">
+                Your WhatsApp Connection Code
+              </p>
+              <div class="pairing-code-badge" id="pairing-code-val">
+                ---- - ----
+              </div>
+              <div class="pairing-code-actions">
+                <button class="btn btn-export" id="btn-copy-pairing" onclick="copyPairingCode()" style="padding:6px 14px; font-size:0.8rem;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <span id="copy-btn-text">Copy Code</span>
+                </button>
+                <button class="btn" onclick="resetPairingForm()" style="padding:6px 14px; font-size:0.8rem;">
+                  Change Number
+                </button>
+              </div>
+
+              <div class="instructions" style="margin-top:14px; text-align:left;">
+                <p style="font-weight:600; color:var(--accent-cyan); margin-bottom:4px;">How to link on your phone:</p>
+                <ol>
+                  <li>Open WhatsApp on your phone</li>
+                  <li>Tap <b>Menu (⋮)</b> (Android) or <b>Settings</b> (iOS)</li>
+                  <li>Select <b>Linked Devices</b> → <b>Link a Device</b></li>
+                  <li>Tap <b>Link with phone number instead</b></li>
+                  <li>Enter the 8-character code shown above</li>
+                </ol>
+              </div>
+            </div>
+
+            <button class="link-alt-btn" onclick="switchLinkMode('qr')">
+              ← Or scan QR code instead
+            </button>
           </div>
         </div>
 
@@ -939,35 +1186,143 @@ app.get('/', async (_req, res) => {
       }
     }
 
+    let activePairingCode = null;
+
+    function switchLinkMode(mode) {
+      const tabQr = document.getElementById('tab-qr');
+      const tabPhone = document.getElementById('tab-phone');
+      const viewQr = document.getElementById('view-qr');
+      const viewPhone = document.getElementById('view-phone');
+
+      if (mode === 'phone') {
+        if (tabQr) tabQr.classList.remove('active');
+        if (tabPhone) tabPhone.classList.add('active');
+        if (viewQr) viewQr.style.display = 'none';
+        if (viewPhone) viewPhone.style.display = 'flex';
+        const input = document.getElementById('pairing-phone-input');
+        if (input) input.focus();
+      } else {
+        if (tabPhone) tabPhone.classList.remove('active');
+        if (tabQr) tabQr.classList.add('active');
+        if (viewPhone) viewPhone.style.display = 'none';
+        if (viewQr) viewQr.style.display = 'flex';
+      }
+    }
+
+    async function handleRequestPairingCode() {
+      const input = document.getElementById('pairing-phone-input');
+      const btn = document.getElementById('btn-request-pairing');
+      const btnText = document.getElementById('btn-request-text');
+      const rawPhone = input ? input.value.trim() : '';
+
+      if (!rawPhone) {
+        showToast('⚠️ Please enter your WhatsApp phone number.');
+        if (input) input.focus();
+        return;
+      }
+
+      if (btn) btn.disabled = true;
+      if (btnText) btnText.textContent = 'Generating Code...';
+
+      try {
+        const res = await fetch('/pairing-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: rawPhone })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          showToast('❌ ' + (data.error || 'Failed to request pairing code.'));
+          if (btn) btn.disabled = false;
+          if (btnText) btnText.textContent = 'Get Pairing Code';
+          return;
+        }
+
+        activePairingCode = data.formattedCode || data.code;
+        const codeVal = document.getElementById('pairing-code-val');
+        if (codeVal) codeVal.textContent = activePairingCode;
+
+        const inputSec = document.getElementById('pairing-input-section');
+        const resultSec = document.getElementById('pairing-result-section');
+        if (inputSec) inputSec.style.display = 'none';
+        if (resultSec) resultSec.style.display = 'block';
+
+        showToast('✅ Pairing code generated! Enter it in WhatsApp on your phone.');
+        addSystemLog('Generated pairing code ' + activePairingCode + ' for +' + data.phone);
+      } catch (err) {
+        showToast('❌ Network error requesting pairing code.');
+      } finally {
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = 'Get Pairing Code';
+      }
+    }
+
+    function resetPairingForm() {
+      const inputSec = document.getElementById('pairing-input-section');
+      const resultSec = document.getElementById('pairing-result-section');
+      if (resultSec) resultSec.style.display = 'none';
+      if (inputSec) inputSec.style.display = 'flex';
+      activePairingCode = null;
+      const input = document.getElementById('pairing-phone-input');
+      if (input) input.focus();
+    }
+
+    async function copyPairingCode() {
+      if (!activePairingCode) return;
+      try {
+        await navigator.clipboard.writeText(activePairingCode.replace(/-/g, ''));
+        const btnText = document.getElementById('copy-btn-text');
+        if (btnText) {
+          btnText.textContent = 'Copied!';
+          setTimeout(() => { btnText.textContent = 'Copy Code'; }, 2000);
+        }
+        showToast('📋 Copied pairing code to clipboard!');
+      } catch (_) {
+        showToast('❌ Failed to copy code.');
+      }
+    }
+
     // Poll status & handle grid state
     async function checkStatus() {
       try {
         const res = await fetch('/bot-status');
         const status = await res.json();
-        updateUI(status.connected, status.hasQR, status.qr);
+        updateUI(status.connected, status.hasQR, status.qr, status.pairingCode);
       } catch (err) {
         // ignore errors
       }
     }
 
-    function updateUI(connected, hasQR, qr) {
+    function updateUI(connected, hasQR, qr, pairingCode) {
       if (connected) {
         statusBadge.className = 'badge badge-connected';
         statusText.textContent = 'WhatsApp Connected';
         qrCard.style.display = 'none';
         infoCard.style.display = 'flex';
         mainGrid.className = 'main-grid main-grid-split';
-      } else if (hasQR && qr) {
+        resetPairingForm();
+      } else if (hasQR || qr || pairingCode) {
         statusBadge.className = 'badge badge-disconnected';
         statusText.textContent = 'Link Device Pending';
         infoCard.style.display = 'none';
         qrCard.style.display = 'flex';
         mainGrid.className = 'main-grid main-grid-split';
         
-        if (qrImg.getAttribute('data-qr') !== qr) {
+        if (qr && qrImg.getAttribute('data-qr') !== qr) {
           qrImg.setAttribute('data-qr', qr);
           qrImg.src = '/qr-image?qr=' + encodeURIComponent(qr) + '&t=' + Date.now();
           addSystemLog('New WhatsApp pairing QR generated.');
+        }
+
+        if (pairingCode && pairingCode.formattedCode && !activePairingCode) {
+          activePairingCode = pairingCode.formattedCode;
+          const codeVal = document.getElementById('pairing-code-val');
+          if (codeVal) codeVal.textContent = activePairingCode;
+          const inputSec = document.getElementById('pairing-input-section');
+          const resultSec = document.getElementById('pairing-result-section');
+          if (inputSec) inputSec.style.display = 'none';
+          if (resultSec) resultSec.style.display = 'block';
         }
       } else {
         statusBadge.className = 'badge badge-connecting';
@@ -1018,8 +1373,27 @@ app.get('/kpi', (_req, res) => {
 
 /** Real-time Connection Status JSON Endpoint */
 app.get('/bot-status', (_req, res) => {
-  const { connected, hasQR, qr } = wa.getStatus();
-  res.json({ connected, hasQR, qr });
+  const { connected, hasQR, qr, pairingCode } = wa.getStatus();
+  res.json({ connected, hasQR, qr, pairingCode });
+});
+
+/** Request WhatsApp Number Pairing Code (Link with phone number instead) */
+app.post(['/pairing-code', '/request-pairing-code'], async (req, res) => {
+  try {
+    const phone = req.body?.phone || req.body?.phoneNumber;
+    if (!phone) {
+      return res.status(400).json({ success: false, error: 'Phone number is required.' });
+    }
+    const result = await wa.requestPairingCode(phone);
+    res.json({
+      success: true,
+      code: result.code,
+      formattedCode: result.formattedCode,
+      phone: result.phone
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to generate pairing code.' });
+  }
 });
 
 /** Server-Sent Events (SSE) Diagnostics Logs Stream */

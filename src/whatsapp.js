@@ -166,6 +166,7 @@ const SIMULATE_READ_RECEIPTS = process.env.SIMULATE_READ_RECEIPTS !== 'false';
 let sock     = null;
 let isReady  = false;
 let qrString = null;
+let currentPairingCode = null;
 
 const labelsStore = {};   // labelId → { id, name, color }
 const chatLabels  = {};   // jid     → Set<labelId>
@@ -202,7 +203,47 @@ try {
   console.error(`⚠️ Failed to load extracted MOH numbers: ${err.message}`);
 }
 
-const getStatus = () => ({ connected: isReady, hasQR: !!qrString, qr: qrString });
+// ─── Number Pairing Code Authentication ───────────────────────────────────────
+async function requestPairingCode(phone) {
+  if (!sock) {
+    throw new Error('WhatsApp socket is not initialized yet. Please wait a moment and try again.');
+  }
+  if (isReady) {
+    throw new Error('WhatsApp is already connected.');
+  }
+
+  const rawClean = (phone || '').replace(/\D/g, '');
+  if (!rawClean || rawClean.length < 8) {
+    throw new Error('Please enter a valid phone number including country code (e.g. 9665xxxxxxxx).');
+  }
+
+  const formattedNumber = formatJidNumber(rawClean);
+
+  try {
+    const rawCode = await sock.requestPairingCode(formattedNumber);
+    const formattedCode = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+    currentPairingCode = {
+      code: rawCode,
+      formattedCode: formattedCode,
+      phone: formattedNumber,
+      timestamp: Date.now()
+    };
+
+    logEvent(`🔢 WhatsApp Pairing Code generated: ${formattedCode} for +${formattedNumber}`, 'info');
+    console.log(`\n╔══════════════════════════════════════════╗`);
+    console.log(`║  📱 WhatsApp Pairing Code: ${formattedCode.padEnd(14, ' ')}║`);
+    console.log(`║  Phone: +${formattedNumber.padEnd(30, ' ')}║`);
+    console.log(`║  Linked Devices → Link with phone number ║`);
+    console.log(`╚══════════════════════════════════════════╝\n`);
+
+    return currentPairingCode;
+  } catch (err) {
+    logEvent(`❌ Failed to generate pairing code for +${formattedNumber}: ${err.message}`, 'error');
+    throw err;
+  }
+}
+
+const getStatus = () => ({ connected: isReady, hasQR: !!qrString, qr: qrString, pairingCode: currentPairingCode });
 const getLabels = () => labelsStore;
 const getLogs   = () => systemLogs;
 
@@ -736,6 +777,7 @@ async function connect() {
     if (connection === 'open') {
       isReady  = true;
       qrString = null;
+      currentPairingCode = null;
       console.log('\n✅ WhatsApp connected!');
 
       if (LEADS_LABEL_ID) {
@@ -1033,5 +1075,5 @@ async function disconnectGracefully() {
   }
 }
 
-module.exports = { connect, sendMessage, getStatus, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels, addManualComplaint, updateManualComplaint, deleteComplaint };
+module.exports = { connect, sendMessage, getStatus, requestPairingCode, getLabels, addLabelToChat, isRegisteredNumber, getLogs, logEvent, disconnectGracefully, getMOHNumbersFromLabels, getComplaintsStore, closeComplaint, promoteTemporaryComplaint, processMOHMessagePipeline, getChatHistory, reconstructComplaintFromHistory, scanAllMOHComplaints, aiDeepScanMOHConversations, store, chatLabels, addManualComplaint, updateManualComplaint, deleteComplaint };
 
