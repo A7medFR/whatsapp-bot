@@ -14,6 +14,7 @@ const {
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeInMemoryStore,
+  Browsers,
 } = require('@whiskeysockets/baileys');
 const pino   = require('pino');
 const qrcode = require('qrcode-terminal');
@@ -273,11 +274,13 @@ async function requestPairingCode(phone) {
     version,
     auth: freshState,
     logger: pino({ level: 'silent' }),
-    browser: ['Windows', 'Chrome', '122.0.0.0'],
+    browser: Browsers.macOS('Desktop'),
     connectTimeoutMs:      30000,
     defaultQueryTimeoutMs: 60000,
     keepAliveIntervalMs:   25000,
     markOnlineOnConnect:   false,
+    syncFullHistory:       false,
+    generateHighQualityLinkPreview: false,
   });
 
   freshSock.ev.on('creds.update', freshSaveCreds);
@@ -353,7 +356,8 @@ async function requestPairingCode(phone) {
         console.log('❌ Logged out. Delete auth_info_baileys/ and restart.');
         return;
       }
-      const d = code === 405 ? 10000 : 5000;
+      const isRestart = code === DisconnectReason.restartRequired || code === 515 || !code;
+      const d = isRestart ? 500 : (code === 405 ? 10000 : 3000);
       console.log(`🔄 Reconnecting in ${d / 1000}s...\n`);
       setTimeout(() => connect(), d);
     }
@@ -676,6 +680,17 @@ async function connect() {
     }
   } catch (_) {}
 
+  // Close existing socket instance cleanly before creating a new one
+  if (sock) {
+    try {
+      sock.ev.removeAllListeners('connection.update');
+      sock.ev.removeAllListeners('creds.update');
+      sock.ev.removeAllListeners('messages.upsert');
+      sock.end(undefined);
+    } catch (_) {}
+    sock = null;
+  }
+
   // AUTH_DIR is defined at module level (near requestPairingCode)
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   
@@ -692,20 +707,21 @@ async function connect() {
     version,
     auth:   state,
     logger: pino({ level: 'silent' }),
-    browser: ['Windows', 'Chrome', '122.0.0.0'],
+    browser: Browsers.macOS('Desktop'),
     connectTimeoutMs:      30000,
     defaultQueryTimeoutMs: 60000,
     keepAliveIntervalMs:   25000,
     markOnlineOnConnect:   false,
+    syncFullHistory:       false,
+    generateHighQualityLinkPreview: false,
     qrTimeout:             300000, // Wait up to 5 minutes for QR scan
   });
 
   sock.ev.on('creds.update', saveCreds);
   store.bind(sock.ev);
 
-  // Persist store to disk every 5 minutes and on key events (message upsert, history sync, chats sync)
+  // Persist store to disk on key events (message upsert, history sync, chats sync)
   const saveStore = () => { try { store.writeToFile(STORE_FILE); } catch (_) {} };
-  setInterval(saveStore, 5 * 60 * 1000);
   sock.ev.on('messages.upsert', saveStore);
   sock.ev.on('messaging-history.set', saveStore);
   sock.ev.on('chats.set', saveStore);
@@ -941,7 +957,9 @@ async function connect() {
         console.log('❌ Logged out. Delete auth_info_baileys/ and restart.');
         return;
       }
-      const d = code === 405 ? 10000 : 5000;
+      // When QR scan completes or restart is required, reconnect immediately (500ms) to finalize authentication
+      const isRestart = code === DisconnectReason.restartRequired || code === 515 || !code;
+      const d = isRestart ? 500 : (code === 405 ? 10000 : 3000);
       console.log(`🔄 Reconnecting in ${d / 1000}s...\n`);
       setTimeout(() => connect(), d);
     }
