@@ -13,7 +13,7 @@
   "dependencies": {
     "@google/genai": "*",
     "@google/generative-ai": "^0.13.0",
-    "@whiskeysockets/baileys": "6.7.9",
+    "@whiskeysockets/baileys": "^6.7.24",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
