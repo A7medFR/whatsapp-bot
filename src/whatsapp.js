@@ -8,14 +8,25 @@
 
 require('dotenv').config();
 
-const {
-  default: makeWASocket,
+let makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
   Browsers,
-  makeCacheableSignalKeyStore,
-} = require('@whiskeysockets/baileys');
+  makeCacheableSignalKeyStore;
+
+async function loadBaileys() {
+  if (!makeWASocket) {
+    const b = await import('@whiskeysockets/baileys');
+    makeWASocket = b.default || b.makeWASocket;
+    useMultiFileAuthState = b.useMultiFileAuthState;
+    DisconnectReason = b.DisconnectReason;
+    fetchLatestBaileysVersion = b.fetchLatestBaileysVersion;
+    Browsers = b.Browsers;
+    makeCacheableSignalKeyStore = b.makeCacheableSignalKeyStore;
+  }
+}
+
 const pino   = require('pino');
 const qrcode = require('qrcode-terminal');
 const fs     = require('fs');
@@ -347,8 +358,8 @@ async function requestPairingCode(phone) {
 
   // ── Step 3: Create a fresh socket with clean auth state ─────────────────────
   // CRITICAL for pairing code:
-  //   - printQRInTerminal: false  (required — prevents conflict with pairing)
   //   - browser: Browsers.macOS('Chrome')  (validated browser signature)
+  await loadBaileys();
   const { state: freshState, saveCreds: freshSaveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -359,7 +370,6 @@ async function requestPairingCode(phone) {
       keys: makeCacheableSignalKeyStore(freshState.keys, pino({ level: 'silent' })),
     },
     logger: pino({ level: 'silent' }),
-    printQRInTerminal: false,
     browser: Browsers.macOS('Chrome'),
     connectTimeoutMs:      30000,
     defaultQueryTimeoutMs: 60000,
@@ -799,6 +809,7 @@ async function connect() {
   }
 
   // AUTH_DIR is defined at module level (near requestPairingCode)
+  await loadBaileys();
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   
   // NOTE: After a QR scan, creds.me is set but registered remains false until

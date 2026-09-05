@@ -2,7 +2,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+
+let downloadMediaMessage;
+
+async function loadBaileys() {
+  if (!downloadMediaMessage) {
+    const b = await import('@whiskeysockets/baileys');
+    downloadMediaMessage = b.downloadMediaMessage;
+  }
+}
 
 // State configuration
 const COMPLAINTS_FILE = path.resolve('./complaints_cache.json');
@@ -60,6 +68,7 @@ function logEvent(message, level = 'info') {
  * Initializes the complaints manager with database, service integrations, and helper functions.
  */
 async function init(options) {
+  await loadBaileys();
   db = options.db;
   geminiService = options.geminiService;
   getChatHistoryHelper = options.getChatHistory;
@@ -302,6 +311,7 @@ async function processMOHMessagePipeline(msg, sock) {
 
   if (hasAttachment && sock && !fromMe) {
     try {
+      if (!downloadMediaMessage) await loadBaileys();
       mediaBuffer = await downloadMediaMessage(
         msg,
         'buffer',
